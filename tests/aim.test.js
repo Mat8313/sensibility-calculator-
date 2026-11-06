@@ -74,3 +74,31 @@ test('boucle complète : l’optimiseur trouve une valeur intermédiaire', () =>
   assert.ok(opt.iteration >= 5 && opt.iteration <= 8);
   assert.ok(opt.bestEstimate() > 100 && opt.bestEstimate() < 900);
 });
+
+test('SeriesRunner : la pause gèle le temps du test, ✕ reprend après un compte à rebours', async () => {
+  const { SeriesRunner } = await import('../js/tests.js');
+  const r = new SeriesRunner(300);
+  const idle = { stick: { x: 0, y: 0, mag: 0 }, fire: false, confirm: false };
+  r.frame(0.016, { ...idle, confirm: true });         // intro → countdown
+  for (let i = 0; i < 200; i++) r.frame(0.016, idle);  // countdown → running
+  assert.equal(r.phase, 'running');
+  const t0 = r.test.t, yaw0 = r.test.cam.yaw;
+  r.pause('Fenêtre quittée');
+  // Stick figé à fond (état gelé par le navigateur) : ni le temps ni la caméra ne doivent bouger
+  for (let i = 0; i < 100; i++) r.frame(0.016, { ...idle, stick: { x: 1, y: 0, mag: 1 } });
+  assert.equal(r.test.t, t0);
+  assert.equal(r.test.cam.yaw, yaw0);
+  r.frame(0.016, { ...idle, confirm: true });
+  assert.equal(r.phase, 'resuming');
+  for (let i = 0; i < 130; i++) r.frame(0.016, idle);   // 2 s de reprise puis le test repart
+  assert.equal(r.phase, 'running');
+  assert.ok(r.test.t > t0);
+});
+
+test('SeriesRunner : pause pendant le compte à rebours → retour à l’intro', async () => {
+  const { SeriesRunner } = await import('../js/tests.js');
+  const r = new SeriesRunner(300);
+  r.frame(0.016, { stick: { x: 0, y: 0, mag: 0 }, fire: false, confirm: true });
+  r.pause();
+  assert.equal(r.phase, 'intro');
+});

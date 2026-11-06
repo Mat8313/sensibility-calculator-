@@ -18,6 +18,10 @@
 
 * { box-sizing: border-box; }
 
+/* L'attribut hidden ne vaut que par la feuille du navigateur (priorité minimale) :
+   n'importe quel "display: flex" l'écraserait. On le rend prioritaire. */
+[hidden] { display: none !important; }
+
 html, body { margin: 0; min-height: 100%; }
 
 body {
@@ -85,7 +89,8 @@ h3 { font-size: 18px; margin: 28px 0 12px; color: var(--accent); text-transform:
 .btn:hover:not(:disabled), .card:hover, .seg:hover { border-color: var(--accent); }
 .btn.primary { background: linear-gradient(135deg, #00b8d4, #0077ff); border-color: transparent; }
 .btn.danger { color: #ff8fb3; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:disabled, .card:disabled { opacity: 0.4; cursor: not-allowed; }
+.card:disabled:hover { border-color: var(--border); }
 .btn.small { padding: 6px 12px; font-size: 13px; }
 
 /* Focus très visible : indispensable pour la navigation manette (pas de souris). */
@@ -164,7 +169,7 @@ input[type=number] {
   font: inherit; font-size: 20px; color: var(--text); background: var(--bg-2);
   border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; width: 100%;
 }
-.chrono { display: flex; align-items: center; gap: 16px; margin: 12px 0; }
+.chrono { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin: 12px 0; }
 #calib-chrono { font-size: 36px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 150px; }
 .chrono.running #calib-chrono { color: var(--accent-2); }
 
@@ -172,6 +177,16 @@ input[type=number] {
 .history-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; background: var(--surface);
   border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 10px; }
 .history-item .actions { margin: 0; }
+
+/* ---------- Modale ---------- */
+.modal { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
+  background: rgba(5, 6, 12, 0.75); backdrop-filter: blur(4px); }
+.modal[hidden] { display: none; }
+.modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 24px; max-width: 460px; width: 100%; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+.modal-box p { margin: 0; font-size: 17px; }
+.modal-box .actions { justify-content: flex-end; }
+.btn.danger-solid { background: linear-gradient(135deg, #ff3d7f, #c2185b); }
 
 /* ---------- Divers ---------- */
 .legend { text-align: center; color: var(--muted); font-size: 13px; padding: 12px; border-top: 1px solid var(--border); }

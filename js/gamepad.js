@@ -140,6 +140,7 @@ export class GamepadManager extends EventTarget {
     const firePressed = r2Down && !this._prevTrigger;
     this._prevTrigger = r2Down;
 
+    this._pad = gp; // gardé uniquement pour la vibration (l'état, lui, est copié)
     this.state = {
       id: gp.id,
       mapping: gp.mapping,
@@ -167,6 +168,17 @@ export class GamepadManager extends EventTarget {
   rightStick() {
     const r = this.rightStickRaw();
     return applyRadialDeadzone(r.x, r.y, this.deadzone);
+  }
+
+  /**
+   * Vibration courte (retour de tir). Chrome/Edge exposent "dual-rumble" sur
+   * DualSense ; ailleurs l'appel est simplement ignoré. playEffect renvoie une
+   * promesse qu'on ne doit pas laisser échouer bruyamment.
+   */
+  rumble(duration = 40, strong = 0.2, weak = 0.6) {
+    const act = this._pad?.vibrationActuator;
+    if (!this.state || !act?.playEffect) return;
+    act.playEffect('dual-rumble', { duration, strongMagnitude: strong, weakMagnitude: weak }).catch(() => {});
   }
 
   wasPressed(btn) { return !!this.state?.justPressed[btn]; }

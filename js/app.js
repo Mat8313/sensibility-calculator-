@@ -19,7 +19,10 @@ import {
   addCalibrationPoint, removeCalibrationPoint, isMonotonic,
 } from './conversion.js';
 import * as store from './storage.js';
-import { $, esc, fmtDate, toast, Screens, GamepadNavigator, fitCanvas, drawStick, drawScoreChart } from './ui.js';
+import {
+  $, esc, fmtDate, plural, toast, Screens, GamepadNavigator, fitCanvas, drawStick, drawScoreChart,
+  confirmDialog, closeDialog, isModalOpen, initDialog,
+} from './ui.js';
 
 /* ------------------------------------------------------------------ */
 /* État global                                                         */
@@ -177,8 +180,9 @@ screens.onShow.menu = () => {
   $('#btn-last-results').disabled = !store.getSessions().length;
 };
 
-$('#btn-new-session').addEventListener('click', () => {
-  if (store.getActiveSession() && !confirm('Une session est en cours. La remplacer ?')) return;
+$('#btn-new-session').addEventListener('click', async () => {
+  if (store.getActiveSession()
+    && !(await confirmDialog('Une session est en cours. La remplacer par une nouvelle ?', { ok: 'Remplacer', danger: true }))) return;
   startSession();
 });
 $('#btn-resume-session').addEventListener('click', resumeSession);
@@ -248,15 +252,38 @@ function frameSession(dt) {
   if (w !== state.renderer.w || h !== state.renderer.h) state.renderer.resize(w, h);
   state.renderer.ctx = ctx;
 
-  if (gp.wasPressed(BTN.CIRCLE)) return abortSeries();
+  // ◯ en plein test met en pause (un appui accidentel ne fait pas perdre la série) ;
+  // ◯ depuis la pause ou l'intro quitte.
+  if (gp.wasPressed(BTN.CIRCLE)) {
+    if (r.phase === 'running' || r.phase === 'resuming') r.pause('Pause');
+    else return abortSeries();
+  }
+  if (gp.wasPressed(BTN.OPTIONS)) r.pause('Pause');
+  if (!gp.connected) r.pause('Manette déconnectée');
+  const test = r.test, hitsBefore = hitCount(test); // référence capturée : r.test peut passer à null pendant frame()
   r.frame(dt, {
     stick: gp.rightStick(),
     fire: !!gp.state?.firePressed,
     confirm: gp.wasPressed(BTN.CROSS),
   });
+  if (hitCount(test) > hitsBefore) gp.rumble();
   r.draw(state.renderer);
   if (r.done) onSeriesDone(r);
 }
+
+/** Nombre de cibles touchées d'un test (Flicks / Précision), 0 pour le tracking. */
+const hitCount = (t) => (t?.records ? t.records.reduce((n, x) => n + (x.hit ? 1 : 0), 0) : 0);
+
+/**
+ * Quand la fenêtre perd le focus, Chrome cesse de mettre à jour la manette :
+ * le dernier état reste figé. Un stick incliné à ce moment ferait tourner la
+ * caméra toute seule et fausserait les mesures → on met en pause.
+ */
+function pauseOnFocusLoss(reason) {
+  if (screens.current === 'session' && state.runner) state.runner.pause(reason);
+}
+window.addEventListener('blur', () => pauseOnFocusLoss('Fenêtre quittée'));
+document.addEventListener('visibilitychange', () => document.hidden && pauseOnFocusLoss('Onglet masqué'));
 
 function abortSeries() {
   state.runner = null;
@@ -306,11 +333,22 @@ function showIteration(entry, searchDone, isValidation = false) {
     ? 'Valeur masquée pour une comparaison à l\'aveugle.'
     : searchDone
       ? `Recherche terminée : meilleure estimation ${s.estimate} °/s. Place au test de validation (3 séries : la meilleure valeur et deux voisines, dans un ordre aléatoire).`
-      : `${entry.explanation} Prochaine valeur : ${state.optimizer.current} °/s.`;
+      : `${entry.explanation} ${nextHint(entry.sens, state.optimizer.current)}`;
   $('#it-details').innerHTML = metricsTable(entry.metrics);
   $('#btn-it-continue').textContent = searchDone ? 'Lancer la validation ✕' : 'Série suivante ✕';
   screens.show('iteration');
   drawScoreChart($('#it-chart'), chartPoints(s, isValidation));
+}
+
+/**
+ * On annonce le SENS du changement, pas la valeur : connaître le chiffre exact
+ * avant de jouer influence la perception ("300, c'est censé être rapide").
+ */
+function nextHint(prev, next) {
+  const r = next / prev;
+  if (r > 1.03) return 'La prochaine série sera plus rapide.';
+  if (r < 0.97) return 'La prochaine série sera plus lente.';
+  return 'La prochaine série sera très proche.';
 }
 
 /** Points du graphique ; pendant la validation, les valeurs testées sont masquées (aveugle). */
@@ -341,7 +379,7 @@ function metricsTable(m) {
     ['', 'Tirs ratés', pct(m.flick.missRate)],
   );
   if (m.precision) rows.push(
-    ['Précision', 'Réussite', `${m.precision.hits}/${m.precision.shots} (${pct(m.precision.accuracy)})`],
+    ['Précision', 'Réussite', `${m.precision.hits}/${m.precision.targets} cibles (${pct(m.precision.accuracy)})`],
     ['', 'Temps de stabilisation', `${n(m.precision.avgStabTime)} s`],
     ['', 'Erreur au tir', `${n(m.precision.avgShotError)}°`],
     ['', 'Dépassements / cible', n(m.precision.overshootRate)],
@@ -380,7 +418,7 @@ function showResults(session) {
 
 screens.onShow.results = () => {
   const s = state.viewedSession;
-  $('#res-date').textContent = `Session du ${fmtDate(s.date)} · ${s.iterations.length} itérations`;
+  $('#res-date').textContent = `Session du ${fmtDate(s.date)} · ${plural(s.iterations.length, "itération")}`;
   $('#res-sens').textContent = `${s.best} °/s`;
   $('#res-sub').textContent = `soit un 360° en ${(360 / s.best).toFixed(2)} s · score de validation ${s.bestScore.toFixed(1)}`;
 
@@ -516,9 +554,9 @@ $('#calib-table').addEventListener('click', (e) => {
   renderCalibration();
 });
 
-$('#btn-calib-reset').addEventListener('click', () => {
+$('#btn-calib-reset').addEventListener('click', async () => {
   const g = calibGame();
-  if (!confirm(`Supprimer toutes les mesures de ${g.name} ?`)) return;
+  if (!(await confirmDialog(`Supprimer toutes les mesures de ${g.name} ?`, { ok: 'Supprimer', danger: true }))) return;
   const c = store.getCalibration();
   delete c[g.id];
   store.saveCalibration(c);
@@ -534,7 +572,11 @@ $('#calib-file').addEventListener('change', async (e) => {
   e.target.value = ''; // permet de réimporter le même fichier
   if (!file) return;
   try {
-    const kind = store.importAll(JSON.parse(await file.text()));
+    const data = JSON.parse(await file.text());
+    if (data?.app === 'SensiLab' && !(await confirmDialog(
+      'Ce fichier est un export complet : il remplacera ton profil, ton historique et tes calibrations.',
+      { ok: 'Remplacer', danger: true }))) return;
+    const kind = store.importAll(data);
     state.profile = store.getProfile();
     toast(kind === 'complet' ? 'Profil, sessions et calibrations importés' : 'Calibrations importées', 'ok');
     renderCalibration();
@@ -551,7 +593,7 @@ screens.onShow.history = () => {
   const list = store.getSessions();
   $('#history-list').innerHTML = list.length ? list.map((s) => `
     <div class="history-item">
-      <div><strong>${s.best} °/s</strong> <span class="muted small">· ${fmtDate(s.date)} · ${s.iterations.length} itérations · score ${s.bestScore.toFixed(1)}</span></div>
+      <div><strong>${Number(s.best)} °/s</strong> <span class="muted small">· ${esc(fmtDate(s.date))} · ${plural(s.iterations.length, 'itération')} · score ${Number(s.bestScore).toFixed(1)}</span></div>
       <div class="actions">
         <button class="btn small" data-view="${esc(s.id)}">Voir</button>
         <button class="btn small danger" data-delete="${esc(s.id)}">Suppr.</button>
@@ -559,11 +601,11 @@ screens.onShow.history = () => {
     </div>`).join('') : '<p class="muted">Aucune session terminée.</p>';
 };
 
-$('#history-list').addEventListener('click', (e) => {
+$('#history-list').addEventListener('click', async (e) => {
   const view = e.target.closest('[data-view]');
   const del = e.target.closest('[data-delete]');
   if (view) showResults(store.getSessions().find((s) => s.id === view.dataset.view));
-  if (del && confirm('Supprimer cette session ?')) {
+  if (del && await confirmDialog('Supprimer cette session de l\'historique ?', { ok: 'Supprimer', danger: true })) {
     store.deleteSession(del.dataset.delete);
     screens.onShow.history();
   }
@@ -586,9 +628,15 @@ Object.assign(screens.backTargets, {
 document.addEventListener('keydown', (e) => {
   document.body.classList.remove('using-gamepad');
   if (e.key === 'Escape') {
-    if (screens.current === 'session') abortSeries(); else screens.back();
+    if (isModalOpen()) closeDialog(false);
+    else if (screens.current === 'session') {
+      const r = state.runner;
+      if (r && (r.phase === 'running' || r.phase === 'resuming')) r.pause('Pause'); else abortSeries();
+    }
+    else screens.back();
   }
 });
+initDialog();
 document.addEventListener('pointerdown', () => document.body.classList.remove('using-gamepad'));
 
 // ?debug : expose l'état pour inspecter dans la console (et pour les tests automatisés).

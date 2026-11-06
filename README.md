@@ -19,7 +19,17 @@ python3 -m http.server 8000
 3. Lance une **Nouvelle session** : 5 à 8 séries de 3 tests + 3 séries de validation (~10 min).
 4. Lis les réglages recommandés par jeu, puis **calibre** tes jeux pour fiabiliser la conversion.
 
-Navigation : **✕** valider · **◯** retour · croix directionnelle / stick gauche pour se déplacer. Clavier et souris fonctionnent aussi (Échap = retour).
+### Commandes
+
+| Où | Commande | Action |
+|---|---|---|
+| Menus | Croix directionnelle / stick gauche | Déplacer le focus (navigation spatiale : bas = élément du dessous) |
+| Menus | ✕ / ◯ | Valider / retour (◯ annule aussi une boîte de confirmation) |
+| Champs numériques | ← → / L1 R1 | −/+ 1 pas / −/+ 10 pas |
+| Tests | Stick droit / R2 | Viser / tirer |
+| Tests | ◯ ou Options | Pause (le temps du test s'arrête) ; ◯ depuis la pause = quitter |
+
+Clavier et souris fonctionnent aussi (Échap = retour / pause). Le test se met **automatiquement en pause** si la fenêtre perd le focus ou si la manette se déconnecte : Chrome gèle alors l'état de la manette, et un stick resté incliné ferait tourner la caméra toute seule. Une vibration courte confirme chaque cible touchée (Chrome/Edge).
 
 Options d'URL : `?rapide` raccourcit les tests (5–6 s, pour développer) · `?debug` expose `window.sensilab` dans la console.
 
@@ -48,7 +58,9 @@ js/
   conversion.js     interpolation °/s ↔ réglage, calibration, fusion des tables        ← pur, testé sous Node
   storage.js        localStorage, import / export JSON
   ui.js             gestion des écrans, navigation manette, graphiques canvas
-tests/              tests Node (node --test) : optimiseur, conversion, zone morte, bot qui joue les vrais tests
+tests/              tests Node (node --test) : optimiseur, conversion, zone morte, stockage,
+                    navigation spatiale, pause, bot qui joue les vrais tests
+tests/e2e/smoke.cjs test navigateur (Playwright) avec manette virtuelle et bot qui vise
 ```
 
 **Une seule boucle `requestAnimationFrame`** dans `app.js` appelle `gamepad.poll()` une fois par frame, puis distribue l'état. L'API Gamepad ne pousse pas d'événements d'axes : si chaque module sondait la manette de son côté, les fronts « vient d'être pressé » seraient consommés de façon incohérente.
@@ -56,8 +68,15 @@ tests/              tests Node (node --test) : optimiseur, conversion, zone mort
 La logique (optimiseur, conversion, mesures) est **séparée du DOM** : c'est ce qui permet de la tester sous Node.
 
 ```bash
-npm test     # = node --test tests/*.test.js
+npm test       # tests unitaires et d'intégration, Node seul (aucune dépendance)
+npm run e2e    # test navigateur ; prérequis : npm i -D playwright && npx playwright install chromium
 ```
+
+Le test e2e lance son propre serveur, simule une DualSense, joue une session complète raccourcie et vérifie notamment : navigation spatiale, pause sur perte de focus, vibration, modale pilotable à la manette, calibration, refus d'un import piégé (XSS) et absence de scroll horizontal sur mobile. Les captures sont écrites dans `tests/e2e/screenshots/` (ignoré par git).
+
+### Sécurité des imports
+
+Un fichier JSON importé est une donnée non fiable dont les valeurs finissent dans la page. `storage.js` reconstruit donc chaque objet **champ par champ** avec des types vérifiés (liste blanche) au lieu de le recopier tel quel, et l'import est **atomique** : tout est validé avant la première écriture, donc un fichier à moitié faux ne corrompt rien. Les textes affichés passent en plus par `esc()` avant toute insertion HTML.
 
 ## La méthode
 
@@ -71,9 +90,9 @@ La caméra simulée tourne à `stick × sens` degrés par seconde (réponse lin�
 |---|---|---|
 | **Tracking** | 15 s | % du temps sur la cible, erreur moyenne (°), retard *stick à fond* |
 | **Flicks** | 30 s | temps pour toucher (R2), dépassements, corrections, arrêts avant la cible, utilisation du stick, tirs ratés |
-| **Précision** | 30 s | réussite (1 tir par cible), temps de stabilisation, erreur au tir, dépassements |
+| **Précision** | 30 s | réussite (1 tir par cible, une cible expirée compte comme ratée), temps de stabilisation, erreur au tir, dépassements |
 
-La valeur testée n'est **jamais affichée pendant les tests**, et la validation se fait à l'aveugle : connaître la valeur biaise le joueur.
+La valeur testée n'est **jamais annoncée avant ni pendant une série** (seulement « plus rapide / plus lente »), et la validation se fait à l'aveugle : connaître le chiffre biaise le ressenti du joueur.
 
 ### 3. Score global et tendance
 

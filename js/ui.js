@@ -20,8 +20,12 @@ export function esc(v) {
 }
 
 export function fmtDate(iso) {
-  return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? 'date inconnue' : d.toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' });
 }
+
+/** "1 itération", "3 itérations" */
+export const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
 let toastTimer = null;
 export function toast(msg, kind = 'info') {
@@ -62,8 +66,52 @@ export class Screens {
   }
 }
 
-/** Éléments navigables de l'écran actif, dans l'ordre du document. */
-export function focusables(root = $('.screen.active')) {
+/* ------------------------------------------------------------------ */
+/* Boîte de dialogue (remplace confirm())                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * confirm() natif est inutilisable à la manette : la boîte système ne reçoit
+ * pas les événements Gamepad et met même en pause la boucle requestAnimationFrame.
+ * On affiche donc une modale HTML et on "piège" la navigation dedans.
+ */
+let modal = null; // { resolve, previousFocus }
+
+export const isModalOpen = () => modal !== null;
+
+export function confirmDialog(message, { ok = 'Confirmer', cancel = 'Annuler', danger = false } = {}) {
+  const okBtn = $('#modal-ok'), cancelBtn = $('#modal-cancel');
+  $('#modal-text').textContent = message;
+  okBtn.textContent = `${ok} ✕`;
+  cancelBtn.textContent = `${cancel} ◯`;
+  okBtn.classList.toggle('danger-solid', danger);
+  return new Promise((resolve) => {
+    if (modal) modal.resolve(false);            // une seule modale à la fois
+    modal = { resolve, previousFocus: document.activeElement };
+    $('#modal').hidden = false;
+    // Action destructrice : focus sur "Annuler", un ✕ réflexe ne détruit rien.
+    (danger ? cancelBtn : okBtn).focus();
+  });
+}
+
+export function closeDialog(result) {
+  if (!modal) return;
+  const { resolve, previousFocus } = modal;
+  modal = null;
+  $('#modal').hidden = true;
+  previousFocus?.focus?.();
+  resolve(result);
+}
+
+/** Câblage des boutons de la modale (appelé une fois au démarrage). */
+export function initDialog() {
+  $('#modal-ok').addEventListener('click', () => closeDialog(true));
+  $('#modal-cancel').addEventListener('click', () => closeDialog(false));
+  $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeDialog(false); });
+}
+
+/** Éléments navigables : la modale si elle est ouverte, sinon l'écran actif. */
+export function focusables(root = isModalOpen() ? $('#modal') : $('.screen.active')) {
   if (!root) return [];
   return $$('button:not([disabled]), input:not([disabled]):not([type=file]), [data-nav]', root)
     .filter((el) => el.offsetParent !== null); // visible
@@ -73,10 +121,46 @@ export function focusables(root = $('.screen.active')) {
 /* Navigation à la manette                                             */
 /* ------------------------------------------------------------------ */
 
+const DIRS = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+
+/**
+ * Navigation SPATIALE : choisit l'élément le plus proche dans la direction
+ * demandée, d'après les rectangles à l'écran. Dans une grille de cartes,
+ * "bas" descend d'une ligne au lieu de passer à la carte suivante.
+ *
+ * Score = distance dans l'axe + 2 × décalage latéral : on préfère un voisin
+ * bien aligné à un voisin plus proche mais en diagonale.
+ * Fonction pure (rectangles en entrée) : testable sans navigateur.
+ *
+ * @param {{x:number,y:number,w:number,h:number}} from
+ * @param {{x:number,y:number,w:number,h:number}[]} rects
+ * @param {'up'|'down'|'left'|'right'} dir
+ * @returns {number} index du meilleur candidat, -1 si aucun
+ */
+export function pickSpatial(from, rects, dir) {
+  const d = DIRS[dir];
+  const cx = from.x + from.w / 2, cy = from.y + from.h / 2;
+  let best = -1, bestScore = Infinity;
+  rects.forEach((r, i) => {
+    const dx = r.x + r.w / 2 - cx, dy = r.y + r.h / 2 - cy;
+    const along = dx * d.x + dy * d.y;            // progression dans la direction
+    if (along <= 4) return;                       // derrière ou au même niveau
+    const lateral = Math.abs(dx * d.y) + Math.abs(dy * d.x);
+    const score = along + 2 * lateral;
+    if (score < bestScore) { bestScore = score; best = i; }
+  });
+  return best;
+}
+
+const rectOf = (el) => {
+  const r = el.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+};
+
 /**
  * D-pad ou stick gauche : déplacer le focus (avec répétition si maintenu).
- * ✕ : activer l'élément focalisé. ◯ : retour.
- * Gauche/droite sur un champ numérique : modifier la valeur.
+ * ✕ : activer l'élément focalisé. ◯ : retour (ou annuler la modale).
+ * Gauche/droite sur un champ numérique : modifier la valeur ; L1/R1 : pas × 10.
  */
 export class GamepadNavigator {
   constructor(screens) {
@@ -111,29 +195,46 @@ export class GamepadNavigator {
       this.nextRepeat = now + 120;
     }
 
+    if (gp.wasPressed(BTN.R1)) this.bigStep(10);
+    if (gp.wasPressed(BTN.L1)) this.bigStep(-10);
     if (gp.wasPressed(BTN.CROSS)) this.activate();
-    if (gp.wasPressed(BTN.CIRCLE)) this.screens.back();
+    if (gp.wasPressed(BTN.CIRCLE)) {
+      if (isModalOpen()) closeDialog(false); else this.screens.back();
+    }
+  }
+
+  /** Modifie le champ numérique focalisé de n pas. */
+  bigStep(n) {
+    const el = document.activeElement;
+    if (el?.tagName !== 'INPUT' || el.type !== 'number') return;
+    if (n > 0) el.stepUp(n); else el.stepDown(-n);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   move(dir) {
     const el = document.activeElement;
     if (el?.tagName === 'INPUT' && el.type === 'number' && (dir === 'left' || dir === 'right')) {
-      dir === 'right' ? el.stepUp() : el.stepDown();
+      if (dir === 'right') el.stepUp(); else el.stepDown();
       el.dispatchEvent(new Event('input', { bubbles: true }));
       return;
     }
     const list = focusables();
     if (!list.length) return;
-    const i = list.indexOf(el);
-    const delta = dir === 'up' || dir === 'left' ? -1 : 1;
-    const next = list[i === -1 ? 0 : (i + delta + list.length) % list.length];
-    next.focus();
+    let next;
+    if (!list.includes(el)) next = list[0];
+    else {
+      const others = list.filter((x) => x !== el);
+      const k = pickSpatial(rectOf(el), others.map(rectOf), dir);
+      // Rien dans cette direction : on boucle (début ↔ fin de l'écran).
+      next = k !== -1 ? others[k] : list[(dir === 'up' || dir === 'left') ? list.length - 1 : 0];
+    }
+    next.focus({ preventScroll: true });
     next.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   activate() {
     const el = document.activeElement;
-    if (!el || el === document.body) return focusables()[0]?.focus();
+    if (!el || !focusables().includes(el)) return focusables()[0]?.focus();
     if (el.tagName === 'BUTTON' || el.hasAttribute('data-nav')) el.click();
   }
 }

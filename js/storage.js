@@ -72,24 +72,91 @@ export function exportAll() {
  * On valide la forme avant d'écrire pour ne jamais corrompre les données existantes.
  */
 export function importAll(data) {
-  if (!data || typeof data !== 'object') throw new Error('Fichier JSON invalide');
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Fichier JSON invalide');
   if (data.app === 'SensiLab') {
-    if (data.profile) saveProfile(data.profile);
-    if (Array.isArray(data.sessions)) write('sessions', data.sessions);
-    if (data.calibration) saveCalibration(validateCalibration(data.calibration));
+    // 1) Tout valider (lève une erreur au moindre défaut)…
+    const profile = data.profile ? validateProfile(data.profile) : null;
+    const sessions = Array.isArray(data.sessions) ? data.sessions.map(validateSession) : null;
+    const calibration = data.calibration ? validateCalibration(data.calibration) : null;
+    // 2) … puis tout écrire : un fichier à moitié faux ne corrompt rien (import atomique).
+    if (profile) saveProfile(profile);
+    if (sessions) write('sessions', sessions);
+    if (calibration) saveCalibration(calibration);
     return 'complet';
   }
   saveCalibration(validateCalibration(data.calibration ?? data));
   return 'calibration';
 }
 
-function validateCalibration(c) {
+/* ---- Validation ----
+ * Un fichier importé est une donnée NON FIABLE : ses valeurs finissent dans le
+ * DOM. On reconstruit chaque objet champ par champ avec des types vérifiés
+ * (liste blanche), au lieu de recopier l'objet tel quel. */
+
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+const numOrNull = (v, name) => {
+  if (v === null || v === undefined) return null;
+  if (!isNum(v)) throw new Error(`Valeur invalide : ${name}`);
+  return v;
+};
+const fail = (msg) => { throw new Error(msg); };
+
+export function validateCalibration(c) {
+  if (!c || typeof c !== 'object' || Array.isArray(c)) fail('Calibration invalide');
+  const out = {};
   for (const [id, v] of Object.entries(c)) {
-    if (!Array.isArray(v?.points) || !v.points.every((p) => Number.isFinite(p.setting) && Number.isFinite(p.degPerSec))) {
-      throw new Error(`Calibration invalide pour "${id}"`);
+    if (!/^[a-z0-9_-]{1,40}$/i.test(id)) fail(`Identifiant de jeu invalide : "${id.slice(0, 40)}"`);
+    if (!Array.isArray(v?.points)) fail(`Calibration invalide pour "${id}"`);
+    out[id] = {
+      points: v.points.map((p) => {
+        if (!isNum(p?.setting) || !isNum(p?.degPerSec) || p.degPerSec <= 0) fail(`Point de calibration invalide pour "${id}"`);
+        return { setting: p.setting, degPerSec: p.degPerSec, date: typeof p.date === 'string' ? p.date.slice(0, 40) : null };
+      }),
+    };
+  }
+  return out;
+}
+
+export function validateProfile(p) {
+  if (typeof p !== 'object' || Array.isArray(p)) fail('Profil invalide');
+  const dz = numOrNull(p.deadzone, 'zone morte');
+  if (dz !== null && (dz < 0 || dz >= 0.5)) fail('Zone morte hors plage');
+  let rest = null;
+  if (p.rest) {
+    rest = {};
+    for (const k of ['drift', 'noise', 'maxRadius', 'recommended', 'driftX', 'driftY', 'count']) {
+      rest[k] = numOrNull(p.rest[k], `profil.${k}`) ?? 0;
     }
   }
-  return c;
+  return { deadzone: dz, rest, bestSens: numOrNull(p.bestSens, 'sensibilité') };
+}
+
+const validateEntry = (e, i) => {
+  if (!isNum(e?.sens) || !isNum(e?.score)) fail(`Itération ${i + 1} invalide`);
+  return {
+    sens: e.sens, score: e.score,
+    tendency: numOrNull(e.tendency, 'tendance') ?? 0,
+    parts: e.parts && typeof e.parts === 'object'
+      ? { tracking: numOrNull(e.parts.tracking, 'score') ?? 0, flick: numOrNull(e.parts.flick, 'score') ?? 0, precision: numOrNull(e.parts.precision, 'score') ?? 0 }
+      : { tracking: 0, flick: 0, precision: 0 },
+    role: typeof e.role === 'string' ? e.role.slice(0, 20) : undefined,
+  };
+};
+
+export function validateSession(s, i = 0) {
+  if (!s || typeof s !== 'object') fail(`Session ${i + 1} invalide`);
+  if (!isNum(s.best) || s.best <= 0 || !isNum(s.bestScore)) fail(`Session ${i + 1} : résultat manquant`);
+  if (!Array.isArray(s.iterations)) fail(`Session ${i + 1} : itérations manquantes`);
+  return {
+    id: typeof s.id === 'string' ? s.id.slice(0, 40) : `import${Date.now()}${i}`,
+    date: typeof s.date === 'string' ? s.date.slice(0, 40) : new Date().toISOString(),
+    deadzone: numOrNull(s.deadzone, 'zone morte'),
+    phase: 'done',
+    best: s.best,
+    bestScore: s.bestScore,
+    iterations: s.iterations.map(validateEntry),
+    validation: { results: Array.isArray(s.validation?.results) ? s.validation.results.map(validateEntry) : [] },
+  };
 }
 
 /** Déclenche le téléchargement d'un objet en fichier .json. */

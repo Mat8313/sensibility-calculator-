@@ -501,7 +501,8 @@ export class PrecisionTest extends AimTest {
       targets: this.records.length,
       shots: shots.length,
       hits: shots.filter((r) => r.hit).length,
-      accuracy: shots.length ? shots.filter((r) => r.hit).length / shots.length : 0,
+      // Les cibles expirées comptent comme ratées : sinon ne tirer qu'"à coup sûr" donnerait 100 %.
+      accuracy: this.records.length ? shots.filter((r) => r.hit).length / this.records.length : 0,
       timeouts: this.records.length - shots.length,
       avgStabTime: mean(this.records.map((r) => r.stabTime)),
       avgShotError: mean(shots.map((r) => r.error)),
@@ -533,40 +534,82 @@ export class SeriesRunner {
     this.sens = sens;
     this.label = label;
     this.index = 0;
-    this.phase = 'intro';
+    this.phase = 'intro';     // intro | countdown | running | paused | resuming | done
     this.countdown = 3;
     this.test = null;
     this.results = {};
     this.done = false;
+    this.pauseReason = '';
+    this.idleCam = new Camera(sens); // évite d'allouer une caméra par frame sur les écrans d'intro
   }
 
   get current() { return SERIES[this.index]; }
 
+  /**
+   * Met le test en pause (fenêtre quittée, manette déconnectée, bouton Options).
+   * Le temps du test ne s'écoule plus : les mesures restent valides.
+   * Une pause pendant le compte à rebours ramène simplement à l'intro.
+   */
+  pause(reason = 'Pause') {
+    if (this.phase === 'running' || this.phase === 'resuming') {
+      this.phase = 'paused';
+      this.pauseReason = reason;
+    } else if (this.phase === 'countdown') {
+      this.phase = 'intro';
+    }
+  }
+
+  get paused() { return this.phase === 'paused'; }
+
   frame(dt, input) {
     if (this.done) return;
-    if (this.phase === 'intro') {
-      if (input.confirm) { this.phase = 'countdown'; this.countdown = 3; }
-    } else if (this.phase === 'countdown') {
-      this.countdown -= dt;
-      if (this.countdown <= 0) { this.phase = 'running'; this.test = new this.current.Test(this.sens); }
-    } else if (this.phase === 'running') {
-      this.test.step(dt, input);
-      if (this.test.done) {
-        this.results[this.current.key] = this.test.results();
-        this.index++;
-        if (this.index >= SERIES.length) { this.done = true; this.phase = 'done'; }
-        else { this.phase = 'intro'; this.test = null; }
-      }
+    switch (this.phase) {
+      case 'intro':
+        if (input.confirm) { this.phase = 'countdown'; this.countdown = 3; }
+        break;
+      case 'countdown':
+        this.countdown -= dt;
+        if (this.countdown <= 0) { this.phase = 'running'; this.test = new this.current.Test(this.sens); }
+        break;
+      case 'paused':
+        // Reprise avec un court compte à rebours : le joueur replace son pouce avant que le temps reparte.
+        if (input.confirm) { this.phase = 'resuming'; this.countdown = 2; }
+        break;
+      case 'resuming':
+        this.countdown -= dt;
+        if (this.countdown <= 0) this.phase = 'running';
+        break;
+      case 'running':
+        this.test.step(dt, input);
+        if (this.test.done) {
+          this.results[this.current.key] = this.test.results();
+          this.index++;
+          if (this.index >= SERIES.length) { this.done = true; this.phase = 'done'; }
+          else { this.phase = 'intro'; this.test = null; }
+        }
+        break;
     }
   }
 
   draw(r) {
-    if (this.phase === 'running' && this.test) return this.test.draw(r);
+    const { Test } = this.current ?? SERIES[SERIES.length - 1];
+    if (this.test && ['running', 'paused', 'resuming'].includes(this.phase)) {
+      this.test.draw(r);
+      if (this.phase === 'paused') {
+        r.overlay([
+          { text: this.pauseReason, font: '700 28px system-ui, sans-serif' },
+          { text: 'Le chrono du test est arrêté, tes mesures sont conservées.', color: '#c3c9e6' },
+          { text: 'Appuie sur ✕ pour reprendre · ◯ pour quitter', color: '#39ff88', font: '600 18px system-ui, sans-serif' },
+        ]);
+      } else if (this.phase === 'resuming') {
+        r.overlay([{ text: String(Math.ceil(this.countdown)), color: '#00e5ff', font: '800 64px system-ui, sans-serif' }]);
+      }
+      return;
+    }
     // Fond figé derrière les overlays
-    r.background(this.test?.cam ?? new Camera(this.sens));
+    r.background(this.test?.cam ?? this.idleCam);
     r.crosshair(false);
     if (this.done) return;
-    const { Test } = this.current;
     const step = `Test ${this.index + 1}/${SERIES.length}${this.label ? ' — ' + this.label : ''}`;
     if (this.phase === 'intro') {
       r.overlay([
