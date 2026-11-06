@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "_comment": "Tables réglage → degrés/seconde stick à fond. Les valeurs 'calibrated: false' sont des ESTIMATIONS à calibrer avec le mode Calibration de SensiLab.",
+  "games": [
+    {
+      "id": "cod",
+      "name": "Call of Duty (BO6 / MW3 / Warzone)",
+      "calibrated": false,
+      "status": "À CALIBRER — valeurs estimées",
+      "setting": {
+        "label": "Sensibilité stick horizontale",
+        "min": 1,
+        "max": 20,
+        "step": 0.1,
+        "default": 6
+      },
+      "deadzone": {
+        "label": "Zone morte min. stick droit",
+        "min": 0,
+        "max": 99,
+        "step": 1,
+        "unit": "%",
+        "default": 5
+      },
+      "responseCurve": {
+        "type": "dynamic",
+        "label": "Courbe de réponse : Dynamique",
+        "note": "La conversion porte sur la vitesse stick à fond, identique quelle que soit la courbe. La courbe change seulement le comportement aux petites inclinaisons."
+      },
+      "table": [
+        { "setting": 1, "degPerSec": 40 },
+        { "setting": 2, "degPerSec": 65 },
+        { "setting": 4, "degPerSec": 115 },
+        { "setting": 6, "degPerSec": 165 },
+        { "setting": 8, "degPerSec": 215 },
+        { "setting": 10, "degPerSec": 265 },
+        { "setting": 14, "degPerSec": 360 },
+        { "setting": 20, "degPerSec": 500 }
+      ]
+    },
+    {
+      "id": "fortnite",
+      "name": "Fortnite",
+      "calibrated": false,
+      "status": "À CALIBRER — valeurs estimées",
+      "setting": {
+        "label": "Vitesse horizontale de visée (Look)",
+        "min": 1,
+        "max": 100,
+        "step": 1,
+        "unit": "%",
+        "default": 45
+      },
+      "deadzone": {
+        "label": "Zone morte stick droit",
+        "min": 0,
+        "max": 30,
+        "step": 1,
+        "unit": "%",
+        "default": 8
+      },
+      "responseCurve": {
+        "type": "exponential",
+        "label": "Courbe de visée : Exponentielle",
+        "note": "Pense à désactiver le 'boost de rotation' pendant la calibration : il ajoute une accélération après un délai stick à fond."
+      },
+      "table": [
+        { "setting": 1, "degPerSec": 30 },
+        { "setting": 10, "degPerSec": 80 },
+        { "setting": 25, "degPerSec": 150 },
+        { "setting": 45, "degPerSec": 245 },
+        { "setting": 65, "degPerSec": 340 },
+        { "setting": 85, "degPerSec": 440 },
+        { "setting": 100, "degPerSec": 515 }
+      ]
+    },
+    {
+      "id": "apex",
+      "name": "Apex Legends",
+      "calibrated": false,
+      "status": "À CALIBRER — valeurs estimées (exemple d'extension)",
+      "setting": {
+        "label": "Sensibilité de visée (Look)",
+        "min": 1,
+        "max": 8,
+        "step": 1,
+        "default": 3
+      },
+      "deadzone": {
+        "label": "Zone morte (Petite / Grande / Aucune)",
+        "min": 0,
+        "max": 2,
+        "step": 1,
+        "unit": "",
+        "default": 1
+      },
+      "responseCurve": {
+        "type": "classic",
+        "label": "Courbe de réponse : Classique",
+        "note": "Avec l'ALC (Advanced Look Controls), saisis directement la vitesse de lacet (yaw) recommandée en °/s."
+      },
+      "table": [
+        { "setting": 1, "degPerSec": 80 },
+        { "setting": 2, "degPerSec": 120 },
+        { "setting": 3, "degPerSec": 160 },
+        { "setting": 4, "degPerSec": 230 },
+        { "setting": 5, "degPerSec": 300 },
+        { "setting": 6, "degPerSec": 370 },
+        { "setting": 7, "degPerSec": 440 },
+        { "setting": 8, "degPerSec": 500 }
+      ]
+    }
+  ]
+}

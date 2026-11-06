@@ -1,0 +1,11 @@
+{
+  "name": "sensilab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trouve ta sensibilité manette optimale et convertis-la pour tes jeux.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "serve": "python3 -m http.server 8000"
+  }
+}

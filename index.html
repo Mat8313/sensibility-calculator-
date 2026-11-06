@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SensiLab — Sensibilité manette optimale</title>
+  <meta name="description" content="Trouve ta sensibilité manette optimale par tests de visée, puis convertis-la pour Call of Duty, Fortnite et d'autres jeux.">
+  <meta name="theme-color" content="#05060c">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%2300e5ff' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%23ff3d7f'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-dot"></span>Sensi<strong>Lab</strong></div>
+    <div id="pad-status" class="pill off">Aucune manette</div>
+  </header>
+
+  <main>
+    <!-- 1. Détection manette -->
+    <section id="screen-connect" class="screen active">
+      <h1>Branche ta manette<br><span class="accent">et appuie sur un bouton</span></h1>
+      <p class="muted">DualSense en USB, navigateur Chrome ou Edge recommandé. Le navigateur n'expose la manette qu'après un premier appui.</p>
+      <div class="sticks">
+        <canvas id="stick-left" class="stick-canvas" aria-label="Stick gauche"></canvas>
+        <canvas id="stick-right" class="stick-canvas" aria-label="Stick droit"></canvas>
+      </div>
+      <p id="pad-info" class="muted small">En attente…</p>
+      <p id="pad-warning" class="warning" hidden></p>
+      <button id="btn-connect-continue" class="btn primary" disabled data-autofocus>Continuer ✕</button>
+    </section>
+
+    <!-- 2. Zone morte -->
+    <section id="screen-deadzone" class="screen">
+      <h2>Zone morte &amp; drift</h2>
+      <p class="muted">Lâche complètement le stick droit, pose la manette, puis lance la mesure (3 s).</p>
+      <canvas id="stick-dz" class="stick-canvas big" aria-label="Stick droit au repos"></canvas>
+      <div class="progress"><div id="dz-progress"></div></div>
+      <dl id="dz-result" class="stats"></dl>
+      <div class="actions">
+        <button id="btn-dz-measure" class="btn primary" data-autofocus>Mesurer ✕</button>
+        <button id="btn-dz-continue" class="btn" disabled>Continuer</button>
+      </div>
+    </section>
+
+    <!-- 3. Menu -->
+    <section id="screen-menu" class="screen">
+      <h2>Menu</h2>
+      <p id="menu-summary" class="muted"></p>
+      <div class="grid">
+        <button id="btn-new-session" class="card" data-autofocus>
+          <span class="card-title">Nouvelle session</span>
+          <span class="card-sub">5 à 8 séries de tests + validation (~10 min)</span>
+        </button>
+        <button id="btn-resume-session" class="card" hidden>
+          <span class="card-title">Reprendre la session</span>
+          <span class="card-sub" id="resume-info"></span>
+        </button>
+        <button id="btn-last-results" class="card">
+          <span class="card-title">Derniers résultats</span>
+          <span class="card-sub">Sensibilité optimale et réglages par jeu</span>
+        </button>
+        <button id="btn-calibration" class="card">
+          <span class="card-title">Calibration des jeux</span>
+          <span class="card-sub">Mesure un 360° en jeu pour fiabiliser la conversion</span>
+        </button>
+        <button id="btn-history" class="card">
+          <span class="card-title">Historique</span>
+          <span class="card-sub">Sessions passées</span>
+        </button>
+        <button id="btn-deadzone" class="card">
+          <span class="card-title">Zone morte</span>
+          <span class="card-sub">Remesurer le drift du stick droit</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 4. Tests (canvas plein écran) -->
+    <section id="screen-session" class="screen full">
+      <canvas id="game-canvas"></canvas>
+      <p class="hint">◯ pour quitter (la session est sauvegardée)</p>
+    </section>
+
+    <!-- 5. Bilan d'une itération -->
+    <section id="screen-iteration" class="screen">
+      <h2 id="it-title">Série terminée</h2>
+      <div class="kpis">
+        <div class="kpi"><span class="kpi-label">Score global</span><span id="it-score" class="kpi-value">–</span></div>
+        <div class="kpi"><span class="kpi-label">Tracking</span><span id="it-tracking" class="kpi-value small">–</span></div>
+        <div class="kpi"><span class="kpi-label">Flicks</span><span id="it-flick" class="kpi-value small">–</span></div>
+        <div class="kpi"><span class="kpi-label">Précision</span><span id="it-precision" class="kpi-value small">–</span></div>
+      </div>
+      <p id="it-tendency" class="tendency"></p>
+      <details class="details">
+        <summary data-nav tabindex="0">Détail des mesures</summary>
+        <div id="it-details"></div>
+      </details>
+      <canvas id="it-chart" class="chart"></canvas>
+      <div class="actions">
+        <button id="btn-it-continue" class="btn primary" data-autofocus>Série suivante ✕</button>
+        <button id="btn-it-menu" class="btn">Pause (menu) ◯</button>
+      </div>
+    </section>
+
+    <!-- 6. Résultats -->
+    <section id="screen-results" class="screen">
+      <h2>Résultats</h2>
+      <p id="res-date" class="muted small"></p>
+      <div class="hero">
+        <span class="hero-label">Sensibilité optimale (stick à fond)</span>
+        <span id="res-sens" class="hero-value">–</span>
+        <span id="res-sub" class="muted small"></span>
+      </div>
+      <h3>Réglages recommandés</h3>
+      <div id="res-games" class="game-list"></div>
+      <h3>Progression du score</h3>
+      <canvas id="res-chart" class="chart"></canvas>
+      <div id="res-validation"></div>
+      <div class="actions">
+        <button id="btn-res-menu" class="btn primary" data-autofocus>Menu ◯</button>
+        <button id="btn-res-calib" class="btn">Calibrer un jeu</button>
+      </div>
+    </section>
+
+    <!-- 7. Calibration -->
+    <section id="screen-calibration" class="screen">
+      <h2>Calibration</h2>
+      <p class="muted">Dans le jeu, stick droit à fond, chronomètre un ou plusieurs tours complets (360°) pour un réglage donné.
+        Démarre le chrono au <em>premier passage</em> d'un repère (rotation déjà lancée) pour exclure l'accélération de départ.</p>
+      <div id="calib-games" class="segmented"></div>
+      <p id="calib-status" class="small"></p>
+      <div class="form">
+        <label>Réglage en jeu <span id="calib-setting-label" class="muted small"></span>
+          <input id="calib-setting" type="number" inputmode="decimal">
+        </label>
+        <label>Nombre de tours
+          <input id="calib-laps" type="number" min="1" max="20" step="1" value="3">
+        </label>
+        <label>Durée mesurée (s)
+          <input id="calib-time" type="number" min="0.1" step="0.01" inputmode="decimal" placeholder="ex : 4.35">
+        </label>
+      </div>
+      <div class="chrono">
+        <span id="calib-chrono">0.00 s</span>
+        <button id="btn-chrono" class="btn">Démarrer le chrono ✕</button>
+      </div>
+      <p class="muted small">Le navigateur ne lit pas la manette quand le jeu a le focus : chronomètre plutôt avec ton téléphone ou une vidéo, puis saisis la durée.</p>
+      <p id="calib-result" class="tendency"></p>
+      <div class="actions">
+        <button id="btn-calib-save" class="btn primary">Enregistrer la mesure</button>
+      </div>
+      <h3>Table actuelle</h3>
+      <div id="calib-table"></div>
+      <div class="actions">
+        <button id="btn-calib-export" class="btn">Exporter (JSON)</button>
+        <button id="btn-calib-import" class="btn">Importer (JSON)</button>
+        <button id="btn-calib-reset" class="btn danger">Réinitialiser ce jeu</button>
+        <input id="calib-file" type="file" accept="application/json,.json" hidden>
+      </div>
+    </section>
+
+    <!-- 8. Historique -->
+    <section id="screen-history" class="screen">
+      <h2>Historique</h2>
+      <div id="history-list"></div>
+      <div class="actions">
+        <button id="btn-history-back" class="btn" data-autofocus>Menu ◯</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="legend">✕ valider · ◯ retour · Croix directionnelle / stick gauche : naviguer</footer>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
