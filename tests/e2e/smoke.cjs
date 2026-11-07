@@ -3,24 +3,27 @@
  * Une manette DualSense virtuelle remplace navigator.getGamepads, et un bot vise
  * réellement les cibles en lisant l'état exposé par ?debug.
  *
- *   npm run e2e        (nécessite Playwright : npm i -D playwright && npx playwright install chromium)
+ *   npm run e2e:desktop                      (Chromium : Chrome / Edge)
+ *   E2E_BROWSER=webkit npm run e2e:desktop   (Safari)
+ *   E2E_BROWSER=firefox npm run e2e:desktop  (Firefox)
  *
  * Fichier .cjs : le package est en "type": "module", mais l'API Playwright
  * s'utilise ici plus simplement en CommonJS.
  */
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require('playwright');
-const { ROOT, serve, padInitScript, checker } = require('./helpers.cjs');
+const { ROOT, serve, padInitScript, checker, browserType } = require('./helpers.cjs');
+const BROWSER = browserType();
 
-const OUT = process.env.E2E_OUT || path.join(ROOT, 'tests/e2e/screenshots');
+const OUT = path.join(process.env.E2E_OUT || path.join(ROOT, 'tests/e2e/screenshots'), `desktop-${BROWSER.name}`);
 const { check, summary } = checker();
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   const server = await serve();
   const base = `http://localhost:${server.address().port}`;
-  const browser = await chromium.launch();
+  console.log(`Moteur : ${BROWSER.name}`);
+  const browser = await BROWSER.type.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -66,6 +69,7 @@ const { check, summary } = checker();
 
   // Session raccourcie : 1 itération + 3 validations
   await press(BTN.CROSS); await wait(400);
+  await page.waitForFunction(() => window.sensilab?.state.optimizer, null, { timeout: 10000 }); // attente explicite (WebKit est plus lent)
   await page.evaluate(() => { const o = sensilab.state.optimizer; o.minIter = 1; o.maxIter = 1; requestAnimationFrame(__bot); });
   let pausedChecked = false, shot = false;
   for (let guard = 0; guard < 400 && (await screen()) !== 'results'; guard++) {

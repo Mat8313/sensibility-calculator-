@@ -102,3 +102,17 @@ test('SeriesRunner : pause pendant le compte à rebours → retour à l’intro'
   r.pause();
   assert.equal(r.phase, 'intro');
 });
+
+test('HUD : le texte évite l’encoche (iPhone en paysage)', async () => {
+  const { Renderer } = await import('../js/tests.js');
+  const texts = [];
+  const ctx = new Proxy({}, {
+    get: (o, k) => (k === 'fillText' ? (t, x) => texts.push({ t, x }) : k in o ? o[k] : () => {}),
+    set: (o, k, v) => { o[k] = v; return true; },
+  });
+  const r = new Renderer(ctx, 852, 393);
+  r.inset = { top: 0, right: 0, bottom: 21, left: 59 };   // iPhone 15, Dynamic Island à gauche
+  r.hud('Tracking', 10, 15, '');
+  const title = texts.find((x) => x.t === 'Tracking');
+  assert.ok(title.x >= 59 + 16, `titre à x=${title.x}, sous l’encoche`);
+});

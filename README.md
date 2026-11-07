@@ -86,8 +86,20 @@ La logique (optimiseur, conversion, mesures) est **séparée du DOM** : c'est ce
 
 ```bash
 npm test       # tests unitaires et d'intégration, Node seul (aucune dépendance)
-npm run e2e    # tests navigateur PC + téléphone ; prérequis : npm i -D playwright && npx playwright install chromium
+npm run e2e        # PC + téléphone sur Chromium ; prérequis : npm i -D playwright && npx playwright install chromium
+npm run e2e:all    # matrice complète : 3 moteurs × (PC, téléphone) ; prérequis : npx playwright install chromium webkit firefox
+E2E_BROWSER=webkit npm run e2e:mobile   # un seul cas (ici : iPhone)
 ```
+
+Chaque système d'exploitation impose ou propose un moteur ; tester les trois moteurs couvre tous les systèmes :
+
+| Moteur | Navigateurs / systèmes couverts | Profil de test |
+|---|---|---|
+| Chromium | Chrome, Edge, Opera, Brave sur Windows / macOS / Linux / ChromeOS ; Chrome Android | PC 1280×800 · Pixel 7 tactile |
+| WebKit | Safari macOS ; **tous** les navigateurs iPhone et iPad (Apple impose WebKit sur iOS, même à « Chrome iOS ») | PC 1280×800 · iPhone 15 avec les limites d'iOS simulées (pas de plein écran, pas de verrouillage d'orientation) |
+| Gecko | Firefox sur Windows / macOS / Linux / Android | PC 1280×800 · écran tactile 412×915 |
+
+Ce sont des moteurs réels (pas une simple taille d'écran), mais pas des appareils réels : l'appairage Bluetooth et le comportement exact de la manette sur chaque système restent à vérifier sur ton matériel.
 
 `npm run e2e:mobile` vérifie aussi : plein écran et demande de paysage au toucher, écran maintenu allumé pendant les tests puis relâché, pause quand le téléphone passe en portrait, reprise au toucher, et aucun défilement horizontal sur chaque écran dans les deux orientations.
 
@@ -166,5 +178,15 @@ Ajoute un objet dans `data/games.json` (au moins 2 points dans `table`, croissan
 
 ## Compatibilité
 
-- **Chrome / Edge** recommandés : DualSense USB en `mapping: "standard"`. Firefox peut renvoyer un mapping non standard (un avertissement s'affiche).
+| Système | Navigateur conseillé | Connexion DualSense |
+|---|---|---|
+| Windows | Chrome ou Edge | USB ou Bluetooth |
+| macOS | Chrome, Edge ou Safari | USB ou Bluetooth |
+| Linux / ChromeOS | Chrome | USB (Bluetooth selon la distribution) |
+| Android | Chrome | Bluetooth (PS + Create) ou USB-C |
+| iPhone / iPad (iOS 14.5+) | Safari, idéalement installé sur l'écran d'accueil | Bluetooth (PS + Create) |
+
+- Ces navigateurs exposent la DualSense en `mapping: "standard"`. Firefox peut renvoyer un mapping non standard selon le système : un avertissement s'affiche alors.
+- La vibration au toucher n'existe que sur Chrome / Edge (desktop et Android) ; ailleurs elle est simplement ignorée.
+- Sur iPhone, Safari ne permet pas le plein écran d'une page : ajoute l'app à l'écran d'accueil pour avoir tout l'écran. Le bouton « Plein écran » n'y est pas affiché.
 - La zone morte de l'app est radiale. La zone morte conseillée pour le jeu (mesure + 1 %) n'est qu'un point de départ, car chaque jeu la calcule à sa façon.

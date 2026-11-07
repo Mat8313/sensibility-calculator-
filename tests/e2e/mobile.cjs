@@ -1,15 +1,25 @@
 /**
- * Test e2e "téléphone + manette" : émulation d'un Android (écran tactile, DPR 2.6),
- * DualSense virtuelle, rotation portrait ↔ paysage pendant une session.
+ * Test e2e "téléphone + manette" : écran tactile, DualSense virtuelle,
+ * rotation portrait ↔ paysage pendant une session.
  *
- *   npm run e2e:mobile
+ *   npm run e2e:mobile                       Android (Chromium, profil Pixel 7)
+ *   E2E_BROWSER=webkit npm run e2e:mobile    iPhone (WebKit, profil iPhone 15 + limites iOS)
+ *   E2E_BROWSER=firefox npm run e2e:mobile   Firefox Android (Gecko, écran tactile)
  */
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium, devices } = require('playwright');
-const { ROOT, serve, padInitScript, checker } = require('./helpers.cjs');
+const { devices } = require('playwright');
+const { ROOT, serve, padInitScript, checker, browserType, iosLimitsInitScript } = require('./helpers.cjs');
+const BROWSER = browserType();
 
-const OUT = process.env.E2E_OUT || path.join(ROOT, 'tests/e2e/screenshots');
+// Profil d'appareil par moteur. Firefox ne gère pas l'option isMobile de Playwright.
+const DEVICE = {
+  chromium: { label: 'Android (Pixel 7)', ctx: devices['Pixel 7'] },
+  webkit: { label: 'iPhone 15', ctx: devices['iPhone 15'] },
+  firefox: { label: 'Firefox Android (tactile)', ctx: { viewport: { width: 412, height: 915 }, hasTouch: true, deviceScaleFactor: 2 } },
+}[BROWSER.name];
+
+const OUT = path.join(process.env.E2E_OUT || path.join(ROOT, 'tests/e2e/screenshots'), `mobile-${BROWSER.name}`);
 const { check, summary } = checker();
 const PORTRAIT = { width: 412, height: 915 };
 const LANDSCAPE = { width: 915, height: 412 };
@@ -18,9 +28,12 @@ const LANDSCAPE = { width: 915, height: 412 };
   fs.mkdirSync(OUT, { recursive: true });
   const server = await serve();
   const base = `http://localhost:${server.address().port}`;
-  const browser = await chromium.launch();
-  const context = await browser.newContext({ ...devices['Pixel 7'] });
+  console.log(`Appareil : ${DEVICE.label} — moteur ${BROWSER.name}`);
+  const browser = await BROWSER.type.launch();
+  const context = await browser.newContext({ ...DEVICE.ctx });
   const page = await context.newPage();
+  const IOS = BROWSER.name === 'webkit';
+  if (IOS) await page.addInitScript(iosLimitsInitScript);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -38,7 +51,7 @@ const LANDSCAPE = { width: 915, height: 412 };
       },
     });
     window.__orientationLocks = [];
-    if (screen.orientation) screen.orientation.lock = async (o) => { window.__orientationLocks.push(o); };
+    if (screen.orientation && !window.__ios) screen.orientation.lock = async (o) => { window.__orientationLocks.push(o); };
   });
 
   const press = (b) => page.evaluate((x) => window.__press(x), b);
@@ -64,6 +77,9 @@ const LANDSCAPE = { width: 915, height: 412 };
   // --- Accueil en portrait ---
   await page.goto(`${base}/?debug&rapide`);
   await wait(400);
+  // Lu au chargement, comme le fait l'app (le plein écran émulé peut modifier ces media queries).
+  const touch = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+  check('écran détecté comme tactile', touch);
   check('accueil : pas de scroll horizontal (portrait)', await noHScroll());
   check('aide "Sur téléphone" présente', await page.isVisible('.phone-help summary'));
   await page.tap('.phone-help summary');
@@ -81,11 +97,21 @@ const LANDSCAPE = { width: 915, height: 412 };
   // --- Session lancée au toucher, téléphone en portrait ---
   await page.tap('#btn-new-session');
   await wait(400);
+  await page.waitForFunction(() => window.sensilab?.state.optimizer, null, { timeout: 10000 }); // attente explicite (WebKit est plus lent)
   await page.evaluate(() => { const o = sensilab.state.optimizer; o.minIter = 1; o.maxIter = 1; });
   check('écran de test affiché', (await screenId()) === 'session');
   check('verrou "écran allumé" demandé', (await page.evaluate(() => window.__wake.requested)) >= 1);
-  check('plein écran activé au toucher', await page.evaluate(() => !!document.fullscreenElement));
-  check('paysage demandé au toucher', (await page.evaluate(() => window.__orientationLocks)).includes('landscape'));
+  if (IOS) {
+    // Safari iPhone : ni plein écran ni verrouillage → l'app doit rester utilisable sans
+    check('iPhone : bouton plein écran masqué (non supporté)', await page.evaluate(() => document.querySelector('#btn-fullscreen').hidden));
+    check('iPhone : pas de plein écran forcé', await page.evaluate(() => !document.fullscreenElement));
+  } else if (touch) {
+    check('plein écran activé au toucher', await page.evaluate(() => !!document.fullscreenElement));
+    check('paysage demandé au toucher', (await page.evaluate(() => window.__orientationLocks)).includes('landscape'));
+  }
+  // Le plein écran émulé de Firefox passe la page en 1366×768 (taille d'un écran de PC) ;
+  // sur un vrai téléphone il garde ses dimensions. On revient donc au portrait réel.
+  await rotate(PORTRAIT);
   await press(CROSS); await wait(300);
   check('portrait : le test ne démarre pas', (await phase()) === 'intro');
   await page.screenshot({ path: `${OUT}/m3-session-portrait.png` });

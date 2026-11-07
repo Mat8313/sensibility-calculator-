@@ -49,6 +49,8 @@ const mean = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length 
 export class Renderer {
   constructor(ctx, width, height) {
     this.ctx = ctx;
+    /** Marges de sécurité (encoche / Dynamic Island / coins arrondis), en px CSS. */
+    this.inset = { top: 0, right: 0, bottom: 0, left: 0 };
     this.resize(width, height);
   }
 
@@ -147,20 +149,24 @@ export class Renderer {
 
   hud(title, timeLeft, duration, info) {
     const { ctx, w } = this;
+    // Le texte évite l'encoche (iPhone en paysage : Dynamic Island sur un côté) ;
+    // le bandeau de fond, lui, va d'un bord à l'autre.
+    const top = this.inset.top, left = 16 + this.inset.left, right = w - 16 - this.inset.right;
+    const base = top + 28;
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(0, 0, w, 44);
+    ctx.fillRect(0, 0, w, top + 44);
     ctx.fillStyle = '#e8ecff';
     ctx.font = '600 16px system-ui, sans-serif';
-    ctx.fillText(title, 16, 28);
+    ctx.fillText(title, left, base);
     ctx.textAlign = 'right';
-    ctx.fillText(`${Math.max(0, timeLeft).toFixed(1)} s`, w - 16, 28);
+    ctx.fillText(`${Math.max(0, timeLeft).toFixed(1)} s`, right, base);
     ctx.font = '14px system-ui, sans-serif';
     ctx.fillStyle = '#9aa4c7';
-    if (info) ctx.fillText(info, w - 90, 28);
+    if (info) ctx.fillText(info, right - 74, base);
     ctx.textAlign = 'left';
     // Barre de temps
     ctx.fillStyle = '#00e5ff';
-    ctx.fillRect(0, 42, w * clamp(timeLeft / duration, 0, 1), 2);
+    ctx.fillRect(0, top + 42, w * clamp(timeLeft / duration, 0, 1), 2);
   }
 
   overlay(lines) {

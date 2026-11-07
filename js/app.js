@@ -22,7 +22,7 @@ import * as store from './storage.js';
 import {
   $, esc, fmtDate, plural, toast, Screens, GamepadNavigator, fitCanvas, drawStick, drawScoreChart,
   confirmDialog, closeDialog, isModalOpen, initDialog,
-  needsLandscape, canFullscreen, enterImmersive, releaseOrientation, ScreenWakeLock,
+  needsLandscape, readSafeArea, canFullscreen, enterImmersive, releaseOrientation, ScreenWakeLock,
 } from './ui.js';
 
 /* ------------------------------------------------------------------ */
@@ -267,6 +267,7 @@ function runSeries(sens, label) {
   const canvas = $('#game-canvas');
   const { ctx, w, h } = fitCanvas(canvas, GAME_MAX_DPR);
   state.renderer = new Renderer(ctx, w, h);
+  state.renderer.inset = readSafeArea();
 }
 
 const GAME_MAX_DPR = 2;
@@ -284,7 +285,10 @@ function frameSession(dt) {
   // Redimensionnement éventuel (rotation mobile, plein écran…)
   const canvas = $('#game-canvas');
   const { ctx, w, h } = fitCanvas(canvas, GAME_MAX_DPR);
-  if (w !== state.renderer.w || h !== state.renderer.h) state.renderer.resize(w, h);
+  if (w !== state.renderer.w || h !== state.renderer.h) {
+    state.renderer.resize(w, h);
+    state.renderer.inset = readSafeArea(); // la rotation déplace l’encoche
+  }
   state.renderer.ctx = ctx;
   const tapped = tapConfirm;
   tapConfirm = false;

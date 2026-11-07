@@ -38,6 +38,25 @@ export const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
  */
 export const needsLandscape = (w, h) => h > w && w < 600;
 
+/**
+ * Marges de sécurité de l'écran (encoche, Dynamic Island, barre d'accueil).
+ * Le canvas ne connaît pas env(safe-area-inset-*) : on le lit sur un élément
+ * témoin invisible dont le padding vaut ces variables CSS.
+ */
+export function readSafeArea() {
+  let probe = document.getElementById('safe-probe');
+  if (!probe) {
+    probe = document.createElement('div');
+    probe.id = 'safe-probe';
+    probe.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none;'
+      + 'padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+    document.body.appendChild(probe);
+  }
+  const s = getComputedStyle(probe);
+  const px = (v) => parseFloat(v) || 0;
+  return { top: px(s.paddingTop), right: px(s.paddingRight), bottom: px(s.paddingBottom), left: px(s.paddingLeft) };
+}
+
 const fsElement = () => document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
 
 /** Vrai si le navigateur sait passer un élément en plein écran (faux sur iPhone). */

@@ -38,7 +38,9 @@ function padInitScript() {
   };
   window.__pad = pad;
   navigator.getGamepads = () => [pad];
-  window.__press = (i, ms = 80) => {
+  // 160 ms ≈ un appui humain ; plus court, un appui peut tomber entre deux images
+  // si le moteur de test marque une pause (WebKit headless : jusqu’à ~110 ms).
+  window.__press = (i, ms = 160) => {
     pad.buttons[i] = { pressed: true, value: 1 };
     setTimeout(() => { pad.buttons[i] = { pressed: false, value: 0 }; }, ms);
   };
@@ -72,4 +74,29 @@ function checker() {
   return { check, summary };
 }
 
-module.exports = { ROOT, serve, padInitScript, checker };
+/**
+ * Moteur choisi par E2E_BROWSER : chromium (Chrome/Edge/Android), webkit
+ * (Safari macOS + tous les navigateurs iPhone/iPad), firefox (Gecko).
+ */
+function browserType() {
+  const name = process.env.E2E_BROWSER || 'chromium';
+  const pw = require('playwright');
+  if (!pw[name]) throw new Error(`E2E_BROWSER inconnu : ${name}`);
+  return { name, type: pw[name] };
+}
+
+/**
+ * Reproduit les limites de Safari sur iPhone, que WebKit pour Linux n'a pas :
+ * pas de plein écran pour une page, pas de verrouillage d'orientation,
+ * pas de vibration de manette. (Wake Lock existe depuis iOS 16.4.)
+ */
+function iosLimitsInitScript() {
+  for (const p of ['fullscreenEnabled', 'webkitFullscreenEnabled']) {
+    Object.defineProperty(Document.prototype, p, { get: () => false, configurable: true });
+  }
+  Element.prototype.requestFullscreen = () => Promise.reject(new TypeError('non supporté sur iPhone'));
+  if (screen.orientation) screen.orientation.lock = () => Promise.reject(new DOMException('non supporté', 'NotSupportedError'));
+  window.__ios = true;
+}
+
+module.exports = { ROOT, serve, padInitScript, checker, browserType, iosLimitsInitScript };
