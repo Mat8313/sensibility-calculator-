@@ -27,6 +27,70 @@ export function fmtDate(iso) {
 /** "1 itération", "3 itérations" */
 export const plural = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 
+/* ------------------------------------------------------------------ */
+/* Téléphone : orientation, plein écran, écran allumé                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Les tests exigent le paysage sur un petit écran en portrait : avec un champ
+ * de vision horizontal de 90° sur 390 px de large, les cibles feraient 2 px.
+ * Une tablette en portrait (≥ 600 px de large) reste jouable.
+ */
+export const needsLandscape = (w, h) => h > w && w < 600;
+
+const fsElement = () => document.fullscreenElement ?? document.webkitFullscreenElement ?? null;
+
+/** Vrai si le navigateur sait passer un élément en plein écran (faux sur iPhone). */
+export const canFullscreen = () =>
+  !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+
+/**
+ * Plein écran + verrouillage en paysage (Android). Doit être appelé depuis un
+ * VRAI geste (tap/clic) : un appui manette n'est pas une "activation utilisateur"
+ * pour le navigateur, l'appel est alors refusé… silencieusement grâce aux catch.
+ */
+export async function enterImmersive() {
+  try {
+    if (!fsElement() && canFullscreen()) {
+      const el = document.documentElement;
+      await (el.requestFullscreen?.({ navigationUI: 'hide' }) ?? el.webkitRequestFullscreen?.());
+    }
+    await screen.orientation?.lock?.('landscape');
+  } catch { /* refusé (pas de geste, iPhone, ordinateur) : sans conséquence */ }
+}
+
+export function releaseOrientation() {
+  try { screen.orientation?.unlock?.(); } catch { /* non supporté */ }
+}
+
+/**
+ * Empêche l'écran de se mettre en veille pendant les tests : on ne touche pas
+ * l'écran (on joue à la manette), donc le téléphone croirait qu'on est inactif.
+ * Le verrou est perdu quand l'onglet passe en arrière-plan : il faut le
+ * redemander au retour (géré par app.js via visibilitychange).
+ */
+export class ScreenWakeLock {
+  constructor() { this.lock = null; this.wanted = false; }
+
+  async acquire() {
+    this.wanted = true;
+    if (this.lock || !('wakeLock' in navigator) || document.hidden) return;
+    try {
+      this.lock = await navigator.wakeLock.request('screen');
+      this.lock.addEventListener('release', () => { this.lock = null; });
+    } catch { this.lock = null; /* économie d'énergie, permission refusée… */ }
+  }
+
+  release() {
+    this.wanted = false;
+    this.lock?.release().catch(() => {});
+    this.lock = null;
+  }
+
+  /** À appeler quand l'onglet redevient visible. */
+  restore() { if (this.wanted) this.acquire(); }
+}
+
 let toastTimer = null;
 export function toast(msg, kind = 'info') {
   const el = $('#toast');
@@ -49,7 +113,9 @@ export class Screens {
 
   show(id) {
     for (const s of $$('.screen')) s.classList.toggle('active', s.id === `screen-${id}`);
+    const prev = this.current;
     this.current = id;
+    this.onChange?.(id, prev);
     this.onShow[id]?.();
     // Focus initial : premier élément marqué data-autofocus, sinon premier bouton
     requestAnimationFrame(() => {
@@ -247,8 +313,10 @@ export class GamepadNavigator {
  * Adapte la résolution interne du canvas à sa taille CSS × devicePixelRatio.
  * Sans ça, le canvas est net sur un écran 1× mais flou sur un écran Retina.
  */
-export function fitCanvas(canvas) {
-  const dpr = window.devicePixelRatio || 1;
+export function fitCanvas(canvas, maxDpr = Infinity) {
+  // maxDpr : sur téléphone (DPR 3), dessiner 9× plus de pixels coûte cher en
+  // batterie et en fluidité pour un gain de netteté invisible sur une scène de visée.
+  const dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
   const { width, height } = canvas.getBoundingClientRect();
   const w = Math.max(1, Math.round(width * dpr)), h = Math.max(1, Math.round(height * dpr));
   if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }

@@ -33,12 +33,18 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-height: 100dvh; /* sur mobile, 100vh inclut la barre d'adresse et déborde */
+  -webkit-text-size-adjust: 100%; /* pas d'agrandissement auto du texte en paysage (iPhone) */
+  touch-action: manipulation;     /* supprime le zoom au double-tap et son délai de 300 ms */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ---------- Barre du haut ---------- */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 20px;
+  /* Encoche / coins arrondis des téléphones (viewport-fit=cover) */
+  padding: max(12px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 12px max(20px, env(safe-area-inset-left));
   border-bottom: 1px solid var(--border);
   background: rgba(5, 6, 12, 0.7);
   backdrop-filter: blur(8px);
@@ -58,7 +64,10 @@ body {
 .pill.off { color: var(--muted); }
 
 /* ---------- Écrans ---------- */
-main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 24px 20px 40px; }
+main {
+  flex: 1; width: 100%; max-width: 980px; margin: 0 auto;
+  padding: 24px max(20px, env(safe-area-inset-right)) 40px max(20px, env(safe-area-inset-left));
+}
 .screen { display: none; animation: fade 0.25s ease; }
 .screen.active { display: block; }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -67,8 +76,22 @@ main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: 24px 20p
   position: fixed; inset: 0; z-index: 20; background: var(--bg);
   display: flex; flex-direction: column;
 }
-#game-canvas { flex: 1; width: 100%; height: 100%; display: block; }
-.screen.full .hint { position: absolute; bottom: 8px; right: 16px; margin: 0; color: var(--muted); font-size: 13px; }
+/* touch-action: none : un doigt posé sur l'écran pendant un test ne fait ni défiler ni zoomer */
+#game-canvas { flex: 1; width: 100%; height: 100%; display: block; touch-action: none; }
+.screen.full .hint {
+  position: absolute; margin: 0; color: var(--muted); font-size: 13px; pointer-events: none;
+  bottom: max(8px, env(safe-area-inset-bottom)); right: max(16px, env(safe-area-inset-right));
+}
+.fs-btn {
+  position: absolute; z-index: 1;
+  left: max(12px, env(safe-area-inset-left)); bottom: max(8px, env(safe-area-inset-bottom));
+  font: 600 14px system-ui, sans-serif; color: var(--text);
+  background: rgba(17, 22, 43, 0.85); border: 1px solid var(--border); border-radius: 999px; padding: 8px 14px;
+}
+.phone-help { margin: 8px 0 4px; color: var(--muted); font-size: 14px; }
+.phone-help summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.phone-help ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 6px; }
+.phone-help strong { color: var(--text); }
 
 h1 { font-size: clamp(28px, 5vw, 44px); line-height: 1.15; margin: 8px 0 12px; }
 h2 { font-size: 28px; margin: 4px 0 12px; }
@@ -86,11 +109,14 @@ h3 { font-size: 18px; margin: 28px 0 12px; color: var(--accent); text-transform:
   transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 }
 .btn { padding: 12px 22px; font-weight: 600; }
-.btn:hover:not(:disabled), .card:hover, .seg:hover { border-color: var(--accent); }
+/* Survol réservé aux souris : sur écran tactile, :hover "colle" après un tap. */
+@media (hover: hover) {
+  .btn:hover:not(:disabled), .card:hover:not(:disabled), .seg:hover { border-color: var(--accent); }
+}
+.btn:active:not(:disabled), .card:active:not(:disabled), .seg:active { transform: scale(0.98); }
 .btn.primary { background: linear-gradient(135deg, #00b8d4, #0077ff); border-color: transparent; }
 .btn.danger { color: #ff8fb3; }
 .btn:disabled, .card:disabled { opacity: 0.4; cursor: not-allowed; }
-.card:disabled:hover { border-color: var(--border); }
 .btn.small { padding: 6px 12px; font-size: 13px; }
 
 /* Focus très visible : indispensable pour la navigation manette (pas de souris). */
@@ -200,10 +226,34 @@ input[type=number] {
 .toast.ok { border-color: var(--ok); }
 
 @media (max-width: 600px) {
-  main { padding: 16px 16px 32px; }
+  main { padding: 16px max(16px, env(safe-area-inset-right)) 32px max(16px, env(safe-area-inset-left)); }
   .sticks { gap: 12px; }
   .stick-canvas { width: 130px; height: 140px; }
   .game { grid-template-columns: 1fr; }
   .game-setting { text-align: left; grid-row: auto; }
   .history-item { grid-template-columns: 1fr; }
+}
+
+/* Téléphone à l'horizontale (hauteur ≈ 360–430 px) : on gagne de la place verticale. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar { position: static; padding-top: max(6px, env(safe-area-inset-top)); padding-bottom: 6px; }
+  .brand { font-size: 17px; }
+  main { padding-top: 12px; padding-bottom: 20px; }
+  h1 { font-size: 26px; margin: 4px 0 8px; }
+  h2 { font-size: 22px; margin: 0 0 8px; }
+  h3 { margin: 18px 0 8px; }
+  .sticks { margin: 10px 0; }
+  .stick-canvas { width: 120px; height: 128px; }
+  .stick-canvas.big { width: 150px; height: 150px; margin: 8px auto; }
+  .card { min-height: 0; padding: 14px 16px; }
+  .kpi-value { font-size: 28px; }
+  .hero { padding: 16px; }
+  .hero-value { font-size: 48px; }
+  .chart { height: 180px; }
+  .legend { padding: 6px; font-size: 12px; }
+}
+
+/* Téléphone en portrait pendant un test : seul le message "tourne ton téléphone" compte. */
+@media (orientation: portrait) and (max-width: 600px) {
+  .screen.full .hint, .fs-btn { display: none; }
 }

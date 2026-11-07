@@ -7,6 +7,8 @@
   "scripts": {
     "test": "node --test tests/*.test.js",
     "serve": "python3 -m http.server 8000",
-    "e2e": "node tests/e2e/smoke.cjs"
+    "e2e": "node tests/e2e/smoke.cjs && node tests/e2e/mobile.cjs",
+    "e2e:desktop": "node tests/e2e/smoke.cjs",
+    "e2e:mobile": "node tests/e2e/mobile.cjs"
   }
 }

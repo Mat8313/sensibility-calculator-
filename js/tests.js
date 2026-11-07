@@ -530,9 +530,10 @@ export const SERIES = [
  * biaise le joueur ("c'est censé être trop rapide").
  */
 export class SeriesRunner {
-  constructor(sens, { label = '' } = {}) {
+  constructor(sens, { label = '', touch = false } = {}) {
     this.sens = sens;
     this.label = label;
+    this.touchHint = touch ? ' (ou touche l’écran)' : ''; // écran tactile : toucher = ✕
     this.index = 0;
     this.phase = 'intro';     // intro | countdown | running | paused | resuming | done
     this.countdown = 3;
@@ -599,7 +600,7 @@ export class SeriesRunner {
         r.overlay([
           { text: this.pauseReason, font: '700 28px system-ui, sans-serif' },
           { text: 'Le chrono du test est arrêté, tes mesures sont conservées.', color: '#c3c9e6' },
-          { text: 'Appuie sur ✕ pour reprendre · ◯ pour quitter', color: '#39ff88', font: '600 18px system-ui, sans-serif' },
+          { text: `✕${this.touchHint} pour reprendre · ◯ pour quitter`, color: '#39ff88', font: '600 18px system-ui, sans-serif' },
         ]);
       } else if (this.phase === 'resuming') {
         r.overlay([{ text: String(Math.ceil(this.countdown)), color: '#00e5ff', font: '800 64px system-ui, sans-serif' }]);
@@ -617,7 +618,7 @@ export class SeriesRunner {
         { text: Test.title, font: '700 30px system-ui, sans-serif' },
         { text: Test.instructions, color: '#c3c9e6' },
         { text: `Durée : ${DURATIONS[this.current.key]} s`, color: '#9aa4c7', font: '14px system-ui, sans-serif' },
-        { text: 'Appuie sur ✕ pour commencer', color: '#39ff88', font: '600 18px system-ui, sans-serif' },
+        { text: `Appuie sur ✕${this.touchHint} pour commencer`, color: '#39ff88', font: '600 18px system-ui, sans-serif' },
       ]);
     } else if (this.phase === 'countdown') {
       r.overlay([

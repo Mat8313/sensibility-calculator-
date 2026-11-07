@@ -33,6 +33,21 @@ Clavier et souris fonctionnent aussi (Échap = retour / pause). Le test se met *
 
 Options d'URL : `?rapide` raccourcit les tests (5–6 s, pour développer) · `?debug` expose `window.sensilab` dans la console.
 
+## Sur téléphone (avec la manette)
+
+1. **Connecte la DualSense** : maintiens **PS + Create** jusqu'à ce que la barre lumineuse clignote, puis choisis « DualSense Wireless Controller » dans le Bluetooth du téléphone (ou branche-la en USB-C).
+2. Ouvre le site dans **Chrome (Android)** ou **Safari (iPhone)**.
+3. **Mets le téléphone à l'horizontale** pour les tests. En portrait, le test se met en pause et attend la rotation.
+4. Conseillé : menu du navigateur → **« Ajouter à l'écran d'accueil »**. SensiLab s'ouvre alors comme une app, sans barre d'adresse (indispensable sur iPhone, où Safari ne sait pas passer une page en plein écran).
+
+Ce que l'app fait pour toi sur téléphone :
+- **Plein écran et paysage** automatiques au premier toucher (Android), plus un bouton « ⛶ Plein écran ».
+- **L'écran ne se met pas en veille** pendant les tests (tu joues à la manette sans toucher l'écran).
+- **Toucher l'écran = ✕** pour démarrer ou reprendre un test.
+- Marges adaptées aux encoches, pas de zoom au double-tap, rendu limité à 2× pour garder la fluidité.
+
+Les résultats sont propres à chaque appareil (`localStorage`) : pour retrouver ton historique PC sur le téléphone, fais **Calibration → Exporter**, puis **Importer** sur l'autre appareil.
+
 ## Déploiement sur GitHub Pages
 
 1. Pousse le dépôt sur GitHub (les fichiers sont à la racine : `index.html`, `css/`, `js/`, `data/`).
@@ -60,7 +75,9 @@ js/
   ui.js             gestion des écrans, navigation manette, graphiques canvas
 tests/              tests Node (node --test) : optimiseur, conversion, zone morte, stockage,
                     navigation spatiale, pause, bot qui joue les vrais tests
-tests/e2e/smoke.cjs test navigateur (Playwright) avec manette virtuelle et bot qui vise
+tests/e2e/smoke.cjs test navigateur PC (Playwright) avec manette virtuelle et bot qui vise
+tests/e2e/mobile.cjs test téléphone (émulation Android tactile, rotations portrait ↔ paysage)
+manifest.webmanifest, icons/   installation sur l'écran d'accueil
 ```
 
 **Une seule boucle `requestAnimationFrame`** dans `app.js` appelle `gamepad.poll()` une fois par frame, puis distribue l'état. L'API Gamepad ne pousse pas d'événements d'axes : si chaque module sondait la manette de son côté, les fronts « vient d'être pressé » seraient consommés de façon incohérente.
@@ -69,8 +86,10 @@ La logique (optimiseur, conversion, mesures) est **séparée du DOM** : c'est ce
 
 ```bash
 npm test       # tests unitaires et d'intégration, Node seul (aucune dépendance)
-npm run e2e    # test navigateur ; prérequis : npm i -D playwright && npx playwright install chromium
+npm run e2e    # tests navigateur PC + téléphone ; prérequis : npm i -D playwright && npx playwright install chromium
 ```
+
+`npm run e2e:mobile` vérifie aussi : plein écran et demande de paysage au toucher, écran maintenu allumé pendant les tests puis relâché, pause quand le téléphone passe en portrait, reprise au toucher, et aucun défilement horizontal sur chaque écran dans les deux orientations.
 
 Le test e2e lance son propre serveur, simule une DualSense, joue une session complète raccourcie et vérifie notamment : navigation spatiale, pause sur perte de focus, vibration, modale pilotable à la manette, calibration, refus d'un import piégé (XSS) et absence de scroll horizontal sur mobile. Les captures sont écrites dans `tests/e2e/screenshots/` (ignoré par git).
 

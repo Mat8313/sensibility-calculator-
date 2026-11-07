@@ -22,6 +22,7 @@ import * as store from './storage.js';
 import {
   $, esc, fmtDate, plural, toast, Screens, GamepadNavigator, fitCanvas, drawStick, drawScoreChart,
   confirmDialog, closeDialog, isModalOpen, initDialog,
+  needsLandscape, canFullscreen, enterImmersive, releaseOrientation, ScreenWakeLock,
 } from './ui.js';
 
 /* ------------------------------------------------------------------ */
@@ -45,6 +46,31 @@ const state = {
 };
 
 if (state.profile.deadzone) gp.deadzone = state.profile.deadzone;
+
+/* ------------------------------------------------------------------ */
+/* Téléphone : écran allumé pendant les tests, plein écran au toucher   */
+/* ------------------------------------------------------------------ */
+
+const wakeLock = new ScreenWakeLock();
+const isTouch = matchMedia('(pointer: coarse)').matches;
+
+screens.onChange = (id, prev) => {
+  if (id === 'session') { wakeLock.acquire(); $('#toast').classList.remove('show'); }
+  else if (prev === 'session') { wakeLock.release(); releaseOrientation(); }
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeLock.restore(); });
+
+// Bouton plein écran : seulement sur écran tactile, et si le navigateur le permet (pas sur iPhone).
+if (isTouch && canFullscreen()) $('#btn-fullscreen').hidden = false;
+$('#btn-fullscreen').addEventListener('click', (e) => { e.stopPropagation(); enterImmersive(); });
+document.addEventListener('fullscreenchange', () => {
+  $('#btn-fullscreen').hidden = !isTouch || !canFullscreen() || !!document.fullscreenElement;
+});
+
+// Un vrai toucher (tap) autorise le plein écran : on en profite dès les boutons du menu.
+for (const id of ['#btn-new-session', '#btn-resume-session', '#btn-it-continue']) {
+  $(id).addEventListener('pointerup', () => { if (isTouch) enterImmersive(); });
+}
 
 /* ------------------------------------------------------------------ */
 /* Boucle principale (requestAnimationFrame)                           */
@@ -92,7 +118,7 @@ function frameConnect() {
     const warn = $('#pad-warning');
     const nonStandard = gp.state.mapping !== 'standard';
     warn.hidden = !nonStandard;
-    if (nonStandard) warn.textContent = 'Mapping non standard détecté : les boutons peuvent être inversés. Utilise Chrome ou Edge pour une DualSense en USB.';
+    if (nonStandard) warn.textContent = 'Mapping non standard détecté : les boutons peuvent être inversés. Utilise Chrome ou Edge sur PC, Chrome sur Android, Safari sur iPhone.';
     if (btn.disabled) { btn.disabled = false; btn.focus(); }
   } else {
     $('#pad-info').textContent = 'En attente… (branche la manette puis appuie sur un bouton)';
@@ -236,21 +262,48 @@ function nextSeries() {
 }
 
 function runSeries(sens, label) {
-  state.runner = new SeriesRunner(sens, { label });
+  state.runner = new SeriesRunner(sens, { label, touch: isTouch });
   screens.show('session');
   const canvas = $('#game-canvas');
-  const { ctx, w, h } = fitCanvas(canvas);
+  const { ctx, w, h } = fitCanvas(canvas, GAME_MAX_DPR);
   state.renderer = new Renderer(ctx, w, h);
 }
+
+const GAME_MAX_DPR = 2;
+
+// Toucher l'écran de test = ✕ (démarrer / reprendre), pratique si la manette est posée.
+let tapConfirm = false;
+$('#game-canvas').addEventListener('pointerup', () => {
+  tapConfirm = true;
+  if (isTouch) enterImmersive();
+});
 
 function frameSession(dt) {
   const r = state.runner;
   if (!r) return;
   // Redimensionnement éventuel (rotation mobile, plein écran…)
   const canvas = $('#game-canvas');
-  const { ctx, w, h } = fitCanvas(canvas);
+  const { ctx, w, h } = fitCanvas(canvas, GAME_MAX_DPR);
   if (w !== state.renderer.w || h !== state.renderer.h) state.renderer.resize(w, h);
   state.renderer.ctx = ctx;
+  const tapped = tapConfirm;
+  tapConfirm = false;
+
+  // Téléphone en portrait : test en pause tant qu'il n'est pas tourné.
+  if (needsLandscape(w, h)) {
+    r.pause('Tourne ton téléphone');
+    if (gp.wasPressed(BTN.CIRCLE)) return abortSeries();
+    // Fond seul (pas r.draw) : sinon le texte de l'intro transparaît sous ce message.
+    state.renderer.background(r.test?.cam ?? r.idleCam);
+    state.renderer.overlay([
+      { text: '📱 ↻', font: '700 44px system-ui, sans-serif' },
+      { text: 'Mets ton téléphone', font: '700 22px system-ui, sans-serif' },
+      { text: 'à l\'horizontale', font: '700 22px system-ui, sans-serif' },
+      { text: '◯ pour quitter', color: '#9aa4c7', font: '14px system-ui, sans-serif' },
+    ]);
+    return;
+  }
+  if (r.paused && r.pauseReason === 'Tourne ton téléphone') r.pauseReason = 'Prêt ?';
 
   // ◯ en plein test met en pause (un appui accidentel ne fait pas perdre la série) ;
   // ◯ depuis la pause ou l'intro quitte.
@@ -264,7 +317,7 @@ function frameSession(dt) {
   r.frame(dt, {
     stick: gp.rightStick(),
     fire: !!gp.state?.firePressed,
-    confirm: gp.wasPressed(BTN.CROSS),
+    confirm: gp.wasPressed(BTN.CROSS) || tapped,
   });
   if (hitCount(test) > hitsBefore) gp.rumble();
   r.draw(state.renderer);

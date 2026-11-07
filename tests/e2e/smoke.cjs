@@ -8,35 +8,13 @@
  * Fichier .cjs : le package est en "type": "module", mais l'API Playwright
  * s'utilise ici plus simplement en CommonJS.
  */
-const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { ROOT, serve, padInitScript, checker } = require('./helpers.cjs');
 
-const ROOT = path.resolve(__dirname, '../..');
 const OUT = process.env.E2E_OUT || path.join(ROOT, 'tests/e2e/screenshots');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
-
-/** Mini serveur statique (refuse toute sortie du dossier du projet). */
-function serve() {
-  const server = http.createServer((req, res) => {
-    const url = decodeURIComponent(req.url.split('?')[0]);
-    const file = path.normalize(path.join(ROOT, url === '/' ? 'index.html' : url));
-    if (!file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
-    fs.readFile(file, (err, data) => {
-      if (err) { res.writeHead(404); return res.end(); }
-      res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
-      res.end(data);
-    });
-  });
-  return new Promise((ok) => server.listen(0, () => ok(server)));
-}
-
-const results = [];
-function check(name, cond, detail = '') {
-  results.push({ name, ok: !!cond });
-  console.log(`${cond ? '✔' : '✘'} ${name}${detail ? ` — ${detail}` : ''}`);
-}
+const { check, summary } = checker();
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
@@ -48,34 +26,7 @@ function check(name, cond, detail = '') {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 
-  await page.addInitScript(() => {
-    const pad = {
-      id: 'DualSense Wireless Controller (virtuelle)', index: 0, connected: true, mapping: 'standard',
-      axes: [0, 0, 0, 0], buttons: Array.from({ length: 18 }, () => ({ pressed: false, value: 0 })), timestamp: 0,
-      vibrationActuator: { playEffect: () => { window.__rumbles = (window.__rumbles || 0) + 1; return Promise.resolve('complete'); } },
-    };
-    window.__pad = pad;
-    navigator.getGamepads = () => [pad];
-    window.__press = (i, ms = 80) => {
-      pad.buttons[i] = { pressed: true, value: 1 };
-      setTimeout(() => { pad.buttons[i] = { pressed: false, value: 0 }; }, ms);
-    };
-    // Bot : contrôleur proportionnel + bruit, tire quand il est sur la cible
-    window.__bot = () => {
-      const test = window.sensilab?.state.runner?.test;
-      const running = window.sensilab?.state.runner?.phase === 'running';
-      const tg = test && (test.targetAt ? test.targetAt(test.t) : test.tracker?.target);
-      if (running && tg) {
-        const e = test.cam.errorTo(tg);
-        let sx = (e.x * 6) / test.cam.sens, sy = (-e.y * 6) / test.cam.sens;
-        const m = Math.hypot(sx, sy); if (m > 1) { sx /= m; sy /= m; }
-        pad.axes[2] = sx + (Math.random() - 0.5) * 0.04;
-        pad.axes[3] = sy + (Math.random() - 0.5) * 0.04;
-        pad.buttons[7] = test.tracker?.inside && Math.random() < 0.3 ? { pressed: true, value: 1 } : { pressed: false, value: 0 };
-      } else { pad.axes[2] = pad.axes[3] = 0; pad.buttons[7] = { pressed: false, value: 0 }; }
-      requestAnimationFrame(window.__bot);
-    };
-  });
+  await page.addInitScript(padInitScript);
 
   const press = (b) => page.evaluate((x) => window.__press(x), b);
   const screen = () => page.evaluate(() => sensilab.screens.current);
@@ -196,7 +147,5 @@ function check(name, cond, detail = '') {
   check('aucune erreur JS', errors.length === 0, errors.join(' | '));
   await browser.close();
   server.close();
-  const failed = results.filter((r) => !r.ok).length;
-  console.log(`\n${results.length - failed}/${results.length} vérifications OK — captures dans ${OUT}`);
-  process.exit(failed ? 1 : 0);
+  process.exit(summary(OUT) ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
