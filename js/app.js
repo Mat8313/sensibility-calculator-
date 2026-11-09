@@ -534,7 +534,7 @@ function renderCalibration() {
     ? `<span class="badge todo">À calibrer</span> ${esc(g.status ?? 'Valeurs estimées')}`
     : `<span class="badge ${merged.calibrated === true ? 'ok' : 'partial'}">${esc(merged.calibrationLevel)}</span>`;
 
-  const measured = store.getCalibration()[g.id]?.points ?? [];
+  const measured = (store.getCalibration()[g.id]?.points ?? []).filter((x) => (x.scale ?? null) === (g.setting.scale ?? null));
   const rows = merged.table.map((p) => {
     const m = measured.find((x) => x.setting === p.setting);
     return `<tr><td>${p.setting}</td><td>${Math.round(p.degPerSec)}</td><td>${(360 / p.degPerSec).toFixed(2)} s</td>
@@ -598,7 +598,7 @@ $('#btn-calib-save').addEventListener('click', () => {
   const g = calibGame();
   const setting = parseFloat($('#calib-setting').value);
   const dps = degPerSecFromLaps(parseFloat($('#calib-laps').value), parseFloat($('#calib-time').value));
-  store.saveCalibration(addCalibrationPoint(store.getCalibration(), g.id, setting, dps));
+  store.saveCalibration(addCalibrationPoint(store.getCalibration(), g.id, setting, dps, undefined, g.setting.scale));
   toast(`Mesure enregistrée : ${g.name} ${setting} → ${dps.toFixed(1)} °/s`, 'ok');
   $('#calib-time').value = '';
   renderCalibration();

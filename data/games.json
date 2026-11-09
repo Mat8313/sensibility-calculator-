@@ -1,18 +1,20 @@
 {
-  "version": 1,
+  "version": 2,
   "_comment": "Tables réglage → degrés/seconde stick à fond. Les valeurs 'calibrated: false' sont des ESTIMATIONS à calibrer avec le mode Calibration de SensiLab.",
   "games": [
     {
       "id": "cod",
-      "name": "Call of Duty (BO6 / MW3 / Warzone)",
+      "name": "Call of Duty (BO7 / BO6 / Warzone)",
       "calibrated": false,
       "status": "À CALIBRER — valeurs estimées",
+      "_scaleNote": "Échelle 0.10–4.00 depuis BO6 S1 Reloaded (déc. 2024), reprise par BO7. Points estimés recalés via la table officielle ancien 1–20 → nouveau (1→0.6, 6→1.6, 10→2.1, 20→4.0).",
       "setting": {
-        "label": "Sensibilité stick horizontale",
-        "min": 1,
-        "max": 20,
-        "step": 0.1,
-        "default": 6
+        "label": "Sensibilité stick horizontale ET verticale (mets la même valeur)",
+        "min": 0.1,
+        "max": 4,
+        "step": 0.01,
+        "default": 1.2,
+        "scale": "0.10-4.00"
       },
       "deadzone": {
         "label": "Zone morte min. stick droit",
@@ -28,14 +30,42 @@
         "note": "La conversion porte sur la vitesse stick à fond, identique quelle que soit la courbe. La courbe change seulement le comportement aux petites inclinaisons."
       },
       "table": [
-        { "setting": 1, "degPerSec": 40 },
-        { "setting": 2, "degPerSec": 65 },
-        { "setting": 4, "degPerSec": 115 },
-        { "setting": 6, "degPerSec": 165 },
-        { "setting": 8, "degPerSec": 215 },
-        { "setting": 10, "degPerSec": 265 },
-        { "setting": 14, "degPerSec": 360 },
-        { "setting": 20, "degPerSec": 500 }
+        {
+          "setting": 0.1,
+          "degPerSec": 10
+        },
+        {
+          "setting": 0.6,
+          "degPerSec": 40
+        },
+        {
+          "setting": 0.8,
+          "degPerSec": 65
+        },
+        {
+          "setting": 1.2,
+          "degPerSec": 115
+        },
+        {
+          "setting": 1.6,
+          "degPerSec": 165
+        },
+        {
+          "setting": 1.9,
+          "degPerSec": 215
+        },
+        {
+          "setting": 2.1,
+          "degPerSec": 265
+        },
+        {
+          "setting": 2.8,
+          "degPerSec": 360
+        },
+        {
+          "setting": 4.0,
+          "degPerSec": 500
+        }
       ]
     },
     {
@@ -44,7 +74,7 @@
       "calibrated": false,
       "status": "À CALIBRER — valeurs estimées",
       "setting": {
-        "label": "Vitesse horizontale de visée (Look)",
+        "label": "Vitesse de visée horizontale ET verticale (options avancées activées)",
         "min": 1,
         "max": 100,
         "step": 1,
@@ -65,13 +95,34 @@
         "note": "Pense à désactiver le 'boost de rotation' pendant la calibration : il ajoute une accélération après un délai stick à fond."
       },
       "table": [
-        { "setting": 1, "degPerSec": 30 },
-        { "setting": 10, "degPerSec": 80 },
-        { "setting": 25, "degPerSec": 150 },
-        { "setting": 45, "degPerSec": 245 },
-        { "setting": 65, "degPerSec": 340 },
-        { "setting": 85, "degPerSec": 440 },
-        { "setting": 100, "degPerSec": 515 }
+        {
+          "setting": 1,
+          "degPerSec": 30
+        },
+        {
+          "setting": 10,
+          "degPerSec": 80
+        },
+        {
+          "setting": 25,
+          "degPerSec": 150
+        },
+        {
+          "setting": 45,
+          "degPerSec": 245
+        },
+        {
+          "setting": 65,
+          "degPerSec": 340
+        },
+        {
+          "setting": 85,
+          "degPerSec": 440
+        },
+        {
+          "setting": 100,
+          "degPerSec": 515
+        }
       ]
     },
     {
@@ -80,7 +131,7 @@
       "calibrated": false,
       "status": "À CALIBRER — valeurs estimées (exemple d'extension)",
       "setting": {
-        "label": "Sensibilité de visée (Look)",
+        "label": "Sensibilité de visée (Look) — hors ALC",
         "min": 1,
         "max": 8,
         "step": 1,
@@ -100,14 +151,38 @@
         "note": "Avec l'ALC (Advanced Look Controls), saisis directement la vitesse de lacet (yaw) recommandée en °/s."
       },
       "table": [
-        { "setting": 1, "degPerSec": 80 },
-        { "setting": 2, "degPerSec": 120 },
-        { "setting": 3, "degPerSec": 160 },
-        { "setting": 4, "degPerSec": 230 },
-        { "setting": 5, "degPerSec": 300 },
-        { "setting": 6, "degPerSec": 370 },
-        { "setting": 7, "degPerSec": 440 },
-        { "setting": 8, "degPerSec": 500 }
+        {
+          "setting": 1,
+          "degPerSec": 80
+        },
+        {
+          "setting": 2,
+          "degPerSec": 120
+        },
+        {
+          "setting": 3,
+          "degPerSec": 160
+        },
+        {
+          "setting": 4,
+          "degPerSec": 230
+        },
+        {
+          "setting": 5,
+          "degPerSec": 300
+        },
+        {
+          "setting": 6,
+          "degPerSec": 370
+        },
+        {
+          "setting": 7,
+          "degPerSec": 440
+        },
+        {
+          "setting": 8,
+          "degPerSec": 500
+        }
       ]
     }
   ]

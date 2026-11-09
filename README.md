@@ -151,13 +151,23 @@ Sur un joueur simulé bruité, l'optimiseur tombe à ±15 % de l'optimum dans 97
 
 ```json
 {
-  "id": "cod", "name": "Call of Duty", "calibrated": false,
-  "setting":  { "label": "Sensibilité stick horizontale", "min": 1, "max": 20, "step": 0.1, "default": 6 },
+  "id": "cod", "name": "Call of Duty (BO7 / BO6 / Warzone)", "calibrated": false,
+  "setting":  { "label": "Sensibilité stick horizontale ET verticale", "min": 0.1, "max": 4, "step": 0.01, "default": 1.2, "scale": "0.10-4.00" },
   "deadzone": { "label": "Zone morte min.", "min": 0, "max": 99, "step": 1, "unit": "%", "default": 5 },
   "responseCurve": { "type": "dynamic", "label": "…", "note": "…" },
-  "table": [ { "setting": 1, "degPerSec": 40 }, { "setting": 20, "degPerSec": 500 } ]
+  "table": [ { "setting": 0.1, "degPerSec": 10 }, { "setting": 4, "degPerSec": 500 } ]
 }
 ```
+
+Échelles vérifiées (nov. 2026) :
+
+| Jeu | Réglage | Plage |
+|---|---|---|
+| CoD BO7 / BO6 / Warzone | Sensibilité stick horizontale + verticale (même valeur) | 0.10 – 4.00 (pas 0.01, défaut 1.20) — l'ancienne échelle 1–20 a disparu en déc. 2024 |
+| Fortnite | Vitesse de visée horizontale + verticale (options avancées) | % |
+| Apex Legends | Sensibilité de visée (hors ALC) | 1 – 8 (en ALC : vitesse de lacet en °/s, max 500) |
+
+`setting.scale` (optionnel) étiquette l'échelle : une mesure de calibration prise sur une autre échelle (ou sans étiquette) est ignorée, pour qu'un ancien « 6 » sur 1–20 ne soit pas lu comme 6 sur 0.10–4.00.
 
 > ⚠️ **Toutes les tables fournies sont des estimations marquées « À CALIBRER ».** Calibre tes jeux avant de te fier aux réglages.
 

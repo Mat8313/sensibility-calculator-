@@ -121,7 +121,7 @@ const { check, summary } = checker();
   // Calibration
   await page.evaluate(() => sensilab.screens.show('calibration'));
   await wait(300);
-  await page.fill('#calib-setting', '6');
+  await page.fill('#calib-setting', '1.6');
   await page.fill('#calib-time', '6');
   await page.click('#btn-calib-save');
   await wait(300);

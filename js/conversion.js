@@ -104,10 +104,12 @@ export function degPerSecFromLaps(laps, seconds) {
  * overrides = { [gameId]: { points: [{setting, degPerSec, date}] } }
  * Retourne un NOUVEL objet (immutabilité : plus simple à sauvegarder/annuler).
  */
-export function addCalibrationPoint(overrides, gameId, setting, degPerSec, date = new Date().toISOString()) {
+export function addCalibrationPoint(overrides, gameId, setting, degPerSec, date = new Date().toISOString(), scale = null) {
   const prev = overrides[gameId]?.points ?? [];
   const points = prev.filter((p) => p.setting !== setting);
-  points.push({ setting, degPerSec: Math.round(degPerSec * 10) / 10, date });
+  const point = { setting, degPerSec: Math.round(degPerSec * 10) / 10, date };
+  if (scale) point.scale = scale;
+  points.push(point);
   return { ...overrides, [gameId]: { points: sortBySetting(points) } };
 }
 
@@ -126,7 +128,10 @@ export function removeCalibrationPoint(overrides, gameId, setting) {
  * - ≥ 2 mesures : seules les mesures sont utilisées (forme + niveau réels)
  */
 export function mergeCalibration(game, overrides) {
-  const pts = overrides?.[game.id]?.points ?? [];
+  // Une mesure n'est valable que sur l'échelle où elle a été prise : si le jeu
+  // change d'échelle (CoD 1–20 → 0.10–4.00), "6" ne veut plus rien dire.
+  const scale = game.setting.scale ?? null;
+  const pts = (overrides?.[game.id]?.points ?? []).filter((p) => (p.scale ?? null) === scale);
   if (pts.length === 0) return { ...game, calibrationLevel: 'défaut' };
 
   if (pts.length === 1) {
