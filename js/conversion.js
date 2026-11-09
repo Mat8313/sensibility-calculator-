@@ -110,14 +110,61 @@ export function addCalibrationPoint(overrides, gameId, setting, degPerSec, date 
   const point = { setting, degPerSec: Math.round(degPerSec * 10) / 10, date };
   if (scale) point.scale = scale;
   points.push(point);
-  return { ...overrides, [gameId]: { points: sortBySetting(points) } };
+  return { ...overrides, [gameId]: { ...overrides[gameId], points: sortBySetting(points) } };
 }
 
 export function removeCalibrationPoint(overrides, gameId, setting) {
   const points = (overrides[gameId]?.points ?? []).filter((p) => p.setting !== setting);
+  return withEntry(overrides, gameId, { ...overrides[gameId], points });
+}
+
+/** Remplace l'entrée d'un jeu, ou la supprime si elle ne contient plus rien. */
+function withEntry(overrides, gameId, entry) {
   const next = { ...overrides };
-  if (points.length) next[gameId] = { points }; else delete next[gameId];
+  const empty = !entry.points?.length && !Object.keys(entry.feel ?? {}).length;
+  if (empty) delete next[gameId];
+  else {
+    const clean = { points: entry.points ?? [] };
+    if (Object.keys(entry.feel ?? {}).length) clean.feel = entry.feel;
+    next[gameId] = clean;
+  }
   return next;
+}
+
+/* ------------------------------------------------------------------ */
+/* Correction au ressenti                                              */
+/* ------------------------------------------------------------------ */
+/*
+ * La calibration au chrono mesure la vitesse PHYSIQUE à fond. Mais si la courbe
+ * du test diffère de celle du jeu, la même vitesse à fond ne donne pas le même
+ * ressenti. Le joueur indique la valeur qu'il préfère vraiment en jeu ; on en
+ * tire un coefficient : vitesse(valeur préférée) / optimum SensiLab.
+ *
+ * Le coefficient dépend de la courbe utilisée pendant les tests (une session en
+ * linéaire et une en Dynamique ne se corrigent pas pareil) et de l'échelle du jeu.
+ * overrides[gameId].feel = { [curveId]: { ratio, scale, date } }
+ */
+
+export function setFeelCorrection(overrides, game, curveId, sessionDegPerSec, preferredSetting, date = new Date().toISOString()) {
+  if (!(sessionDegPerSec > 0)) throw new Error('Optimum de session invalide');
+  const merged = mergeCalibration(game, overrides);
+  const ratio = Math.round((settingToDegPerSec(merged, preferredSetting) / sessionDegPerSec) * 1000) / 1000;
+  if (!(ratio > 0)) throw new Error('Valeur préférée hors table');
+  const feel = { ...overrides[game.id]?.feel, [curveId]: { ratio, scale: game.setting.scale ?? null, date } };
+  return withEntry(overrides, game.id, { ...overrides[game.id], feel });
+}
+
+export function clearFeelCorrection(overrides, gameId, curveId) {
+  const feel = { ...overrides[gameId]?.feel };
+  delete feel[curveId];
+  return withEntry(overrides, gameId, { ...overrides[gameId], feel });
+}
+
+/** Coefficient applicable (1 si aucun, ou s'il date d'une autre échelle du jeu). */
+export function feelRatio(game, overrides, curveId) {
+  const f = overrides?.[game.id]?.feel?.[curveId];
+  if (!f || (f.scale ?? null) !== (game.setting.scale ?? null)) return 1;
+  return f.ratio;
 }
 
 /**
@@ -152,9 +199,10 @@ export function isMonotonic(table) {
 }
 
 /** Recommandations pour tous les jeux à partir d'une sensibilité en °/s. */
-export function recommendAll(games, overrides, degPerSec, measuredDeadzone) {
+export function recommendAll(games, overrides, degPerSec, measuredDeadzone, curveId = 'linear') {
   return games.map((g) => {
     const merged = mergeCalibration(g, overrides);
+    const ratio = feelRatio(g, overrides, curveId);
     return {
       id: g.id,
       name: g.name,
@@ -162,7 +210,9 @@ export function recommendAll(games, overrides, degPerSec, measuredDeadzone) {
       unit: g.setting.unit ?? '',
       calibrationLevel: merged.calibrationLevel,
       monotonic: isMonotonic(merged.table),
-      ...degPerSecToSetting(merged, degPerSec),
+      feelRatio: ratio,
+      gameCurve: g.responseCurve?.model ?? null,
+      ...degPerSecToSetting(merged, degPerSec * ratio),
       deadzone: measuredDeadzone != null ? recommendDeadzone(g, measuredDeadzone) : null,
       deadzoneLabel: g.deadzone?.label,
       curve: g.responseCurve,

@@ -69,3 +69,21 @@ test('localStorage indisponible : lecture → valeur par défaut, pas d’except
   assert.equal(store.saveProfile({}), false);
   globalThis.localStorage = saved;
 });
+
+test('import/export conserve échelle des points, correction au ressenti et courbe', () => {
+  store.saveProfile({ deadzone: 0.05, rest: null, bestSens: 280, testCurve: 'cod-dynamic' });
+  store.saveSession({ ...goodSession, curve: 'cod-dynamic' });
+  store.saveCalibration({ cod: {
+    points: [{ setting: 1.2, degPerSec: 115, date: 'x', scale: '0.10-4.00' }],
+    feel: { linear: { ratio: 1.9, scale: '0.10-4.00', date: 'x' } },
+  } });
+  const dump = JSON.parse(JSON.stringify(store.exportAll()));
+  mem.clear();
+  store.importAll(dump);
+  const c = store.getCalibration().cod;
+  assert.equal(c.points[0].scale, '0.10-4.00');
+  assert.equal(c.feel.linear.ratio, 1.9);
+  assert.equal(store.getProfile().testCurve, 'cod-dynamic');
+  assert.equal(store.getSessions()[0].curve, 'cod-dynamic');
+  assert.throws(() => store.validateCalibration({ cod: { points: [], feel: { linear: { ratio: '<b>' } } } }));
+});

@@ -152,7 +152,7 @@ Sur un joueur simulé bruité, l'optimiseur tombe à ±15 % de l'optimum dans 97
 ```json
 {
   "id": "cod", "name": "Call of Duty (BO7 / BO6 / Warzone)", "calibrated": false,
-  "setting":  { "label": "Sensibilité stick horizontale ET verticale", "min": 0.1, "max": 4, "step": 0.01, "default": 1.2, "scale": "0.10-4.00" },
+  "setting":  { "label": "Sensibilité stick horizontale ET verticale", "min": 0.1, "max": 4, "step": 0.05, "default": 1.2, "scale": "0.10-4.00" },
   "deadzone": { "label": "Zone morte min.", "min": 0, "max": 99, "step": 1, "unit": "%", "default": 5 },
   "responseCurve": { "type": "dynamic", "label": "…", "note": "…" },
   "table": [ { "setting": 0.1, "degPerSec": 10 }, { "setting": 4, "degPerSec": 500 } ]
@@ -163,9 +163,13 @@ Sur un joueur simulé bruité, l'optimiseur tombe à ±15 % de l'optimum dans 97
 
 | Jeu | Réglage | Plage |
 |---|---|---|
-| CoD BO7 / BO6 / Warzone | Sensibilité stick horizontale + verticale (même valeur) | 0.10 – 4.00 (pas 0.01, défaut 1.20) — l'ancienne échelle 1–20 a disparu en déc. 2024 |
+| CoD BO7 / BO6 / Warzone | Sensibilité stick horizontale + verticale (même valeur) | 0.10 – 4.00 (pas 0.05, défaut 1.20) — l'ancienne échelle 1–20 a disparu en déc. 2024 |
 | Fortnite | Vitesse de visée horizontale + verticale (options avancées) | % |
 | Apex Legends | Sensibilité de visée (hors ALC) | 1 – 8 (en ALC : vitesse de lacet en °/s, max 500) |
+
+**Courbe des tests** (menu) : la conversion compare la vitesse stick à fond, ce qui n'est juste que si le test applique la même courbe que le jeu. Choisis « CoD Dynamique » avant une session pour BO7 (`js/curves.js`, formules approchées : Activision ne les publie pas). La courbe est figée pour toute la session.
+
+**Correction au ressenti** (écran Résultats) : si la valeur proposée ne colle pas en jeu, saisis celle qui te convient. SensiLab en tire un coefficient `vitesse(valeur préférée) / optimum`, enregistré par jeu ET par courbe de test, et l'applique aux sessions suivantes.
 
 `setting.scale` (optionnel) étiquette l'échelle : une mesure de calibration prise sur une autre échelle (ou sans étiquette) est ignorée, pour qu'un ancien « 6 » sur 1–20 ne soit pas lu comme 6 sur 0.10–4.00.
 

@@ -16,8 +16,9 @@ import { SeriesRunner, Renderer } from './tests.js';
 import { SensOptimizer, computeScore, computeTendency, describeTendency, pickValidated } from './optimizer.js';
 import {
   loadGames, recommendAll, mergeCalibration, settingToDegPerSec, degPerSecFromLaps,
-  addCalibrationPoint, removeCalibrationPoint, isMonotonic,
+  addCalibrationPoint, removeCalibrationPoint, isMonotonic, setFeelCorrection, clearFeelCorrection,
 } from './conversion.js';
+import { applyCurve, curveLabel, CURVE_IDS } from './curves.js';
 import * as store from './storage.js';
 import {
   $, esc, fmtDate, plural, toast, Screens, GamepadNavigator, fitCanvas, drawStick, drawScoreChart,
@@ -204,7 +205,16 @@ screens.onShow.menu = () => {
   $('#btn-resume-session').hidden = !active;
   if (active) $('#resume-info').textContent = `${active.iterations.length} série(s) faite(s) — ${fmtDate(active.date)}`;
   $('#btn-last-results').disabled = !store.getSessions().length;
+  $('#curve-info').textContent = `${curveLabel(p.testCurve)} — appuie pour changer`;
 };
+
+// Courbe appliquée au stick pendant les tests : choisis celle du jeu visé (ex. CoD Dynamique pour BO7).
+$('#btn-curve').addEventListener('click', () => {
+  const cur = CURVE_IDS.indexOf(state.profile.testCurve ?? 'linear');
+  state.profile = { ...state.profile, testCurve: CURVE_IDS[(cur + 1) % CURVE_IDS.length] };
+  store.saveProfile(state.profile);
+  $('#curve-info').textContent = `${curveLabel(state.profile.testCurve)} — appuie pour changer`;
+});
 
 $('#btn-new-session').addEventListener('click', async () => {
   if (store.getActiveSession()
@@ -227,6 +237,7 @@ function startSession() {
     id: `s${Date.now()}`,
     date: new Date().toISOString(),
     deadzone: gp.deadzone,
+    curve: state.profile.testCurve ?? 'linear', // figée pour toute la session : changer en cours fausserait la recherche
     phase: 'search',              // search → validation → done
     iterations: [],
     validation: { set: [], results: [] },
@@ -319,7 +330,7 @@ function frameSession(dt) {
   if (!gp.connected) r.pause('Manette déconnectée');
   const test = r.test, hitsBefore = hitCount(test); // référence capturée : r.test peut passer à null pendant frame()
   r.frame(dt, {
-    stick: gp.rightStick(),
+    stick: applyCurve(gp.rightStick(), state.session?.curve),
     fire: !!gp.state?.firePressed,
     confirm: gp.wasPressed(BTN.CROSS) || tapped,
   });
@@ -453,7 +464,7 @@ function finishSession() {
   s.best = chosen.sens;
   s.bestScore = chosen.score;
   s.phase = 'done';
-  s.recommendations = recommendAll(state.games, store.getCalibration(), s.best, s.deadzone);
+  s.recommendations = recommendAll(state.games, store.getCalibration(), s.best, s.deadzone, s.curve);
   delete s.optimizer;
   store.saveSession(s);
   store.clearActiveSession();
@@ -480,20 +491,7 @@ screens.onShow.results = () => {
   $('#res-sub').textContent = `soit un 360° en ${(360 / s.best).toFixed(2)} s · score de validation ${s.bestScore.toFixed(1)}`;
 
   // Recalculé à l'affichage : une calibration faite APRÈS la session est prise en compte.
-  const recos = recommendAll(state.games, store.getCalibration(), s.best, s.deadzone);
-  $('#res-games').innerHTML = recos.map((r) => {
-    const badge = r.calibrationLevel === 'défaut'
-      ? '<span class="badge todo">À calibrer</span>'
-      : r.calibrationLevel.startsWith('partiel') ? '<span class="badge partial">Partiel</span>' : '<span class="badge ok">Calibré</span>';
-    const range = r.outOfRange ? ` · ⚠ hors plage (${r.outOfRange === 'trop-haut' ? 'max atteint' : 'min atteint'})` : '';
-    const dz = r.deadzone !== null ? ` · ${esc(r.deadzoneLabel)} : ${r.deadzone} %` : '';
-    return `<div class="game">
-      <span class="game-name">${esc(r.name)}${badge}</span>
-      <span class="game-setting">${r.setting}${esc(r.unit)}</span>
-      <span class="game-meta">${esc(r.settingLabel)} → ${r.achievedDegPerSec} °/s (écart ${r.errorPct > 0 ? '+' : ''}${r.errorPct} %)${range}${dz}<br>${esc(r.curve?.label ?? '')}${r.monotonic ? '' : ' · ⚠ table non monotone, vérifie tes mesures'}</span>
-    </div>`;
-  }).join('');
-
+  renderResultGames(s);
   const v = s.validation?.results ?? [];
   $('#res-validation').innerHTML = v.length ? `<h3>Test de validation</h3><table class="table">
     <tr><th>Valeur</th><th>°/s</th><th>Score</th></tr>
@@ -501,6 +499,54 @@ screens.onShow.results = () => {
   </table>` : '';
   requestAnimationFrame(() => drawScoreChart($('#res-chart'), chartPoints(s)));
 };
+
+function renderResultGames(s) {
+  const curve = s.curve ?? 'linear';
+  $('#res-curve').textContent = `Session faite avec la courbe : ${curveLabel(curve)}.`;
+  const recos = recommendAll(state.games, store.getCalibration(), s.best, s.deadzone, curve);
+  $('#res-games').innerHTML = recos.map((r) => {
+    const badge = r.calibrationLevel === 'défaut'
+      ? '<span class="badge todo">À calibrer</span>'
+      : r.calibrationLevel.startsWith('partiel') ? '<span class="badge partial">Partiel</span>' : '<span class="badge ok">Calibré</span>';
+    const range = r.outOfRange ? ` · ⚠ hors plage (${r.outOfRange === 'trop-haut' ? 'max atteint' : 'min atteint'})` : '';
+    const dz = r.deadzone !== null ? ` · ${esc(r.deadzoneLabel)} : ${r.deadzone} %` : '';
+    const g = state.games.find((x) => x.id === r.id);
+    const mismatch = r.gameCurve && r.gameCurve !== curve
+      ? `<br>⚠ Ce jeu utilise la courbe « ${esc(curveLabel(r.gameCurve))} » : relance une session avec cette courbe pour une conversion plus fiable.` : '';
+    const feelInfo = r.feelRatio !== 1
+      ? `Corrigé au ressenti (×${r.feelRatio}) <button class="btn small" data-feel-clear="${esc(r.id)}">Annuler</button>`
+      : 'Pas le bon ressenti en jeu ?';
+    return `<div class="game">
+      <span class="game-name">${esc(r.name)}${badge}</span>
+      <span class="game-setting">${r.setting}${esc(r.unit)}</span>
+      <span class="game-meta">${esc(r.settingLabel)} → ${r.achievedDegPerSec} °/s (écart ${r.errorPct > 0 ? '+' : ''}${r.errorPct} %)${range}${dz}<br>${esc(r.curve?.label ?? '')}${r.monotonic ? '' : ' · ⚠ table non monotone, vérifie tes mesures'}${mismatch}</span>
+      <div class="feel">${feelInfo}
+        <label>Valeur qui te convient : <input type="number" data-feel-input="${esc(r.id)}" min="${g.setting.min}" max="${g.setting.max}" step="${g.setting.step}" value="${r.setting}" inputmode="decimal"></label>
+        <button class="btn small" data-feel-save="${esc(r.id)}">Corriger</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Correction au ressenti : "SensiLab propose X, mais en jeu c'est Y qui me va".
+$('#res-games').addEventListener('click', (e) => {
+  const s = state.viewedSession;
+  if (!s) return;
+  const curve = s.curve ?? 'linear';
+  const save = e.target.closest('[data-feel-save]');
+  const clear = e.target.closest('[data-feel-clear]');
+  if (save) {
+    const g = state.games.find((x) => x.id === save.dataset.feelSave);
+    const val = parseFloat($(`[data-feel-input="${CSS.escape(g.id)}"]`).value);
+    if (!(val >= g.setting.min && val <= g.setting.max)) return toast(`Valeur hors plage (${g.setting.min}–${g.setting.max})`, 'warn');
+    store.saveCalibration(setFeelCorrection(store.getCalibration(), g, curve, s.best, val));
+    toast(`${g.name} : la valeur ${val} sert désormais de référence (courbe ${curveLabel(curve)})`, 'ok');
+    renderResultGames(s);
+  } else if (clear) {
+    store.saveCalibration(clearFeelCorrection(store.getCalibration(), clear.dataset.feelClear, curve));
+    renderResultGames(s);
+  }
+});
 
 $('#btn-res-menu').addEventListener('click', () => screens.show('menu'));
 $('#btn-res-calib').addEventListener('click', () => screens.show('calibration'));

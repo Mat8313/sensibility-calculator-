@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   validateGames, settingToDegPerSec, degPerSecToSetting, roundToStep, degPerSecFromLaps,
   addCalibrationPoint, removeCalibrationPoint, mergeCalibration, isMonotonic, recommendAll, recommendDeadzone,
+  setFeelCorrection, clearFeelCorrection, feelRatio,
 } from '../js/conversion.js';
 
 const data = JSON.parse(readFileSync(new URL('../data/games.json', import.meta.url)));
@@ -80,4 +81,36 @@ test('recommendAll couvre tous les jeux', () => {
   const r = recommendAll(data.games, {}, 250, 0.05);
   assert.equal(r.length, data.games.length);
   for (const x of r) assert.ok(Number.isFinite(x.setting));
+});
+
+test('CoD : pas de 0.05 comme en jeu', () => {
+  assert.equal(cod.setting.step, 0.05);
+  assert.equal(degPerSecToSetting(cod, 120).setting, 1.25); // 115 + 0.1/0.4*50 = 1.24 → 1.25
+});
+
+test('correction au ressenti : 0.61 proposé, 1.20 préféré', () => {
+  const sc = cod.setting.scale;
+  // Table mesurée façon Matis : on prend la table par défaut comme "mesures".
+  let ov = {};
+  for (const p of cod.table) ov = addCalibrationPoint(ov, 'cod', p.setting, p.degPerSec, 'x', sc);
+  const best = settingToDegPerSec(cod, 0.6); // l'optimum SensiLab tombait sur ~0.6
+  assert.equal(degPerSecToSetting(mergeCalibration(cod, ov), best).setting, 0.6);
+  ov = setFeelCorrection(ov, cod, 'linear', best, 1.2);
+  assert.equal(ov.cod.points.length, cod.table.length); // les mesures sont conservées
+  assert.equal(recommendAll([cod], ov, best, null, 'linear')[0].setting, 1.2);
+  // Une autre courbe de test n'hérite pas de la correction
+  assert.equal(feelRatio(cod, ov, 'cod-dynamic'), 1);
+  // Ajouter une mesure ne fait pas perdre la correction
+  ov = addCalibrationPoint(ov, 'cod', 3, 420, 'x', sc);
+  assert.ok(ov.cod.feel.linear);
+  ov = clearFeelCorrection(ov, 'cod', 'linear');
+  assert.equal(ov.cod.feel, undefined);
+  assert.equal(feelRatio(cod, ov, 'linear'), 1);
+});
+
+test('correction seule (sans mesure) puis annulation → entrée supprimée', () => {
+  let ov = setFeelCorrection({}, cod, 'linear', 100, 1.2);
+  assert.deepEqual(ov.cod.points, []);
+  ov = clearFeelCorrection(ov, 'cod', 'linear');
+  assert.deepEqual(ov, {});
 });

@@ -12,7 +12,7 @@
         "label": "Sensibilité stick horizontale ET verticale (mets la même valeur)",
         "min": 0.1,
         "max": 4,
-        "step": 0.01,
+        "step": 0.05,
         "default": 1.2,
         "scale": "0.10-4.00"
       },
@@ -27,7 +27,8 @@
       "responseCurve": {
         "type": "dynamic",
         "label": "Courbe de réponse : Dynamique",
-        "note": "La conversion porte sur la vitesse stick à fond, identique quelle que soit la courbe. La courbe change seulement le comportement aux petites inclinaisons."
+        "note": "La courbe Dynamique ralentit les inclinaisons moyennes : pour une conversion fiable, lance tes sessions avec la courbe « CoD Dynamique » (menu), puis ajuste avec la correction au ressenti.",
+        "model": "cod-dynamic"
       },
       "table": [
         {
@@ -92,7 +93,8 @@
       "responseCurve": {
         "type": "exponential",
         "label": "Courbe de visée : Exponentielle",
-        "note": "Pense à désactiver le 'boost de rotation' pendant la calibration : il ajoute une accélération après un délai stick à fond."
+        "note": "Pense à désactiver le 'boost de rotation' pendant la calibration : il ajoute une accélération après un délai stick à fond.",
+        "model": "fortnite-exp"
       },
       "table": [
         {

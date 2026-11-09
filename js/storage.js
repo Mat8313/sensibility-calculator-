@@ -30,7 +30,7 @@ function write(key, value) {
 }
 
 /* Profil : zone morte mesurée, dernière sensibilité retenue */
-export const getProfile = () => read('profile', { deadzone: null, rest: null, bestSens: null });
+export const getProfile = () => read('profile', { deadzone: null, rest: null, bestSens: null, testCurve: 'linear' });
 export const saveProfile = (p) => write('profile', p);
 
 /* Sessions : historique complet */
@@ -110,12 +110,27 @@ export function validateCalibration(c) {
     out[id] = {
       points: v.points.map((p) => {
         if (!isNum(p?.setting) || !isNum(p?.degPerSec) || p.degPerSec <= 0) fail(`Point de calibration invalide pour "${id}"`);
-        return { setting: p.setting, degPerSec: p.degPerSec, date: typeof p.date === 'string' ? p.date.slice(0, 40) : null };
+        const pt = { setting: p.setting, degPerSec: p.degPerSec, date: typeof p.date === 'string' ? p.date.slice(0, 40) : null };
+        const sc = safeScale(p.scale);
+        if (sc) pt.scale = sc;
+        return pt;
       }),
     };
+    if (v.feel && typeof v.feel === 'object' && !Array.isArray(v.feel)) {
+      const feel = {};
+      for (const [curve, f] of Object.entries(v.feel)) {
+        if (!/^[a-z0-9_-]{1,40}$/i.test(curve)) fail(`Courbe invalide pour "${id}"`);
+        if (!isNum(f?.ratio) || f.ratio <= 0 || f.ratio > 10) fail(`Correction au ressenti invalide pour "${id}"`);
+        feel[curve] = { ratio: f.ratio, scale: safeScale(f.scale), date: typeof f.date === 'string' ? f.date.slice(0, 40) : null };
+      }
+      if (Object.keys(feel).length) out[id].feel = feel;
+    }
   }
   return out;
 }
+
+/** Étiquette d'échelle (ex. "0.10-4.00") : chaîne courte et inoffensive, sinon null. */
+const safeScale = (s) => (typeof s === 'string' && /^[a-z0-9._-]{1,20}$/i.test(s) ? s : null);
 
 export function validateProfile(p) {
   if (typeof p !== 'object' || Array.isArray(p)) fail('Profil invalide');
@@ -128,7 +143,8 @@ export function validateProfile(p) {
       rest[k] = numOrNull(p.rest[k], `profil.${k}`) ?? 0;
     }
   }
-  return { deadzone: dz, rest, bestSens: numOrNull(p.bestSens, 'sensibilité') };
+  const testCurve = typeof p.testCurve === 'string' && /^[a-z0-9_-]{1,40}$/i.test(p.testCurve) ? p.testCurve : 'linear';
+  return { deadzone: dz, rest, bestSens: numOrNull(p.bestSens, 'sensibilité'), testCurve };
 }
 
 const validateEntry = (e, i) => {
@@ -151,6 +167,7 @@ export function validateSession(s, i = 0) {
     id: typeof s.id === 'string' ? s.id.slice(0, 40) : `import${Date.now()}${i}`,
     date: typeof s.date === 'string' ? s.date.slice(0, 40) : new Date().toISOString(),
     deadzone: numOrNull(s.deadzone, 'zone morte'),
+    curve: typeof s.curve === 'string' && /^[a-z0-9_-]{1,40}$/i.test(s.curve) ? s.curve : 'linear',
     phase: 'done',
     best: s.best,
     bestScore: s.bestScore,
